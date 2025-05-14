@@ -285,14 +285,14 @@ def tally_phastcons_annotations(phastcons:dict, annotations:dict,
             # Prepare the output
             for feature in results:
                 span = results[feature]
-                prop = 0
+                prop = 0.0
                 if total_phastcon_len>0:
                     prop = span/total_phastcon_len
                 row = [chromosome,               # chromID
                        f'{total_phastcon_len}',  # phastConsLen
                        feature,                  # featType
                        f'{span}',                # featLen
-                       f'{prop:0.3%}' ]          # featProp
+                       f'{prop:0.8f}' ]         # featProp
                 row = '\t'.join(row)
                 fh.write(f'{row}\n')
 
@@ -396,7 +396,7 @@ def calculate_gff_stats(annotations:dict, chromosomes:dict, outdir:int='.',
                     feature,                 # featType
                     f'{feat_n}',             # featNum
                     f'{total_l}',            # featLen
-                    f'{prop_l:0.6f}',        # featProp
+                    f'{prop_l:0.8f}',        # featProp
                     f'{mean_l:0.3f}',        # meanLen
                     f'{median_l:0.3g}',      # medianLen
                     f'{sd_l:0.3f}',          # sdLen
@@ -420,7 +420,7 @@ def calculate_gff_stats(annotations:dict, chromosomes:dict, outdir:int='.',
                 feature,                 # featType
                 f'{feat_n}',             # featNum
                 f'{total_l}',            # featLen
-                f'{prop_l:0.6f}',        # featProp
+                f'{prop_l:0.8f}',        # featProp
                 f'{mean_l:0.3f}',        # meanLen
                 f'{median_l:0.3g}',      # medianLen
                 f'{sd_l:0.3f}',          # sdLen
