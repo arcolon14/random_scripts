@@ -95,17 +95,42 @@ def parse_n0_table(n0_tsv_f:str, sco_ids:list, out_dir:str)->dict:
             records += 1
             # Skip the orthogroups that are not single-copy
             hog_id = fields[0]
-            if hog_id not in scos:
-                continue
-            print(fields)
+            node = fields[2]
+            # if hog_id not in scos:
+            #     continue
+            # if not node != 'n0':
+            #     continue
+            # TODO: Check
+            # Loop over the gene IDs per taxon
+            keep = True
+            for i, spp_genes in enumerate(fields[3:]):
+                spp_genes_l = list()
+                for gene in spp_genes.split(' '):
+                    gene = gene.rstrip(',').rstrip('\'').lstrip('\'')
+                    if len(gene) > 0:
+                        spp_genes_l.append(gene)
+                n_genes = len(spp_genes_l)
+                # print(spp_genes_l, n_genes)
+                if n_genes != 1:
+                    keep = False
+                    continue
+            # Only process the orthogroups kept
+            if keep:
+                for i, gene in enumerate(fields[3:]):
+                    taxon = taxa[i]
+                    # Add to the dictionary
+                    transcript_ids.setdefault(taxon, list())
+                    transcript_ids[taxon].append((gene, hog_id))
+                    # print(hog_id, taxon, gene)
+                kept += 1
 
-            if records > 10:
-                break
+                # print(fields)
 
-    # outfh = open(f'{out_dir}/single_copy_ortholog_summary.tsv', 'w')
+            # if records > 1000:
+            #     break
 
-
-    # close
+    # print(transcript_ids)
+    print(f'    Retained {kept:,} hierarchical orthogroups from the N0 table.', flush=True)
 
 def main():
     print(f'{PROG} started on {date()} {time()}.')
