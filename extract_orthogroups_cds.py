@@ -234,27 +234,33 @@ def group_sco_sequences(transcript_ids:dict, taxon_cds:dict,
         None
     '''
     print('\nGrouping sequences and processing outputs...')
-    # First, you have to re-organize the transcript IDs to be per orthogroup.
-    orthogroup_transcripts = regroup_transcripts(transcript_ids)
-    # Loop across each orthogroup and extract its sequences.
-    for hog_id in orthogroup_transcripts:
-        # Prepare a new output FASTA for that orthogroup
-        out_fa = f'{out_dir}/{hog_id}.cds.fa'
-        with open(out_fa, 'w') as fa_fh:
-            # Now, process each taxon
-            for taxon_transcript in orthogroup_transcripts[hog_id]:
-                trans_id = taxon_transcript[0]
-                taxon = taxon_transcript[1]
-                # Get the sequences for that transcript
-                sequence = taxon_cds[taxon].get(trans_id, None)
-                if sequence is None:
-                    sys.exit(f'Error: {trans_id} transcript not found for {taxon}.')
-                # Prepare the new FASTA record
-                fa_fh.write(f'>{trans_id}_{taxon}\n')
-                # Wrap the sequence lines up to `fa_line_width` characters
-                for start in range(0, len(sequence), fa_line_width):
-                    seq_line = sequence[start:(start+fa_line_width)]
-                    fa_fh.write(f'{seq_line}\n')
+    # Create a table for summarizing the transcript-orthogroup relationships
+    with open(f'{out_dir}/sco_transcripts.tsv', 'w') as tsv_fh:
+        tsv_fh.write('#HOG_orthogroup\tTaxon\tTranscriptID\n')
+        # First, you have to re-organize the transcript IDs to be per orthogroup.
+        orthogroup_transcripts = regroup_transcripts(transcript_ids)
+        # Loop across each orthogroup and extract its sequences.
+        for hog_id in orthogroup_transcripts:
+            # Prepare a new output FASTA for that orthogroup
+            out_fa = f'{out_dir}/{hog_id}.cds.fa'
+            with open(out_fa, 'w') as fa_fh:
+                # Now, process each taxon
+                for taxon_transcript in orthogroup_transcripts[hog_id]:
+                    trans_id = taxon_transcript[0]
+                    taxon = taxon_transcript[1]
+                    # Get the sequences for that transcript
+                    sequence = taxon_cds[taxon].get(trans_id, None)
+                    if sequence is None:
+                        sys.exit(f'Error: {trans_id} transcript not found for {taxon}.')
+                    # Prepare the new FASTA record
+                    fa_fh.write(f'>{trans_id}_{taxon}\n')
+                    # Wrap the sequence lines up to `fa_line_width` characters
+                    for start in range(0, len(sequence), fa_line_width):
+                        seq_line = sequence[start:(start+fa_line_width)]
+                        fa_fh.write(f'{seq_line}\n')
+                    # Save to the summary table
+                    row = f'{hog_id}\t{taxon}\t{trans_id}\n'
+                    tsv_fh.write(row)
 
 def main():
     print(f'{PROG} started on {date()} {time()}.')
