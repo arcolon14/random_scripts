@@ -9,8 +9,8 @@ FA_LINE_WIDTH = 60
 def parse_args(prog=PROG):
     '''Set and verify command line options.'''
     p = argparse.ArgumentParser()
-    p.add_argument('-s', '--sco-id-list', required=True, 
-                   help='(str) Path to file containing the list of single-copy orthogroup IDs.')
+    p.add_argument('-s', '--sco-list', required=True, 
+                   help='(str) Path to orthofinder Orthogroups/Orthogroups_SingleCopyOrthologues.txt file.')
     p.add_argument('-n', '--n-zero-tsv', required=True, 
                    help='(str) Path to the orthofinder N0 hierarchical orthogroup file.')
     p.add_argument('-c', '--cds-in-dir', required=True, 
@@ -19,7 +19,7 @@ def parse_args(prog=PROG):
                    help='(str) Path to output directory [default=./].')
     # Check inputs
     args = p.parse_args()
-    assert os.path.exists(args.sco_id_list)
+    assert os.path.exists(args.sco_list)
     assert os.path.exists(args.n_zero_tsv)
     assert os.path.exists(args.cds_in_dir)
     args.out_dir = args.out_dir.rstrip('/')
@@ -35,23 +35,26 @@ def time() -> str:
     '''Print the current time in HH:MM:SS format.'''
     return datetime.now().strftime("%H:%M:%S")
 
-def load_sco_ids(sco_ids_f:str)->list:
+def load_sco_ids(sco_f:str)->list:
     '''
-    Load the SCO IDs from the input file.
+    Load the Single-Copy Ortholog (SCO) IDs from orthofinder's
+    Orthogroups/Orthogroups_SingleCopyOrthologues.txt input file.
     Args:
-        sco_ids_f: (str) Path to the SCO IDs file
+        sco_f: (str) Path to the Orthogroups_SingleCopyOrthologues file
     Returns:
         sco_ids: (list) List of SCO IDs
     '''
     print('\nLoading the Single-Copy Orthogroup IDs...', flush=True)
     sco_ids = list()
-    with open(sco_ids_f) as fh:
+    with open(sco_f) as fh:
         for line in fh:
             line = line.strip('\n')
             if line.startswith('#') or len(line)==0:
                 continue
-            if not line.startswith('N0'):
-                sys.exit(f'Error: {line} is invalid N0 orthogroup ID. They must start with N0.NOG[...].')
+            if line.startswith('N0'):
+                sys.exit(f'Warning: Orthogroup ID starts with N0, indicating an older version of orthofinder. This script is complatible for orthofinder versions >3.1.0.')
+            if not line.startswith('OG'):
+                sys.exit(f'Error: {line} is invalid orthogroup ID. They must start with OG[...].')
             sco_ids.append(line)
     print(f'    Loaded {len(sco_ids):,} SCO IDs from input file.')
     return sco_ids
@@ -253,7 +256,8 @@ def group_sco_sequences(transcript_ids:dict, taxon_cds:dict,
                     if sequence is None:
                         sys.exit(f'Error: {trans_id} transcript not found for {taxon}.')
                     # Prepare the new FASTA record
-                    fa_fh.write(f'>{trans_id}_{taxon}\n')
+                    # fa_fh.write(f'>{trans_id}_{taxon}\n')
+                    fa_fh.write(f'>{taxon}\n')
                     # Wrap the sequence lines up to `fa_line_width` characters
                     for start in range(0, len(sequence), fa_line_width):
                         seq_line = sequence[start:(start+fa_line_width)]
