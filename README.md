@@ -35,6 +35,69 @@ chr02    5008219       five_prime_UTR   4539     0.091%
 chr02    5008219       three_prime_UTR  32199    0.643%
 ```
 
+## Extract CDS sequences for single-copy orthologs based on an Orthofinder run
+
+Take the results from Orthofinder (>3.1.0), identify the transcript/gene IDs for 
+all single-copy orthogroups, and extract their corresponding CDS sequences.
+
+```sh
+$ python3 extract_orthogroups_cds.py -h
+  extract_orthogroups_cds.py started on 2025-07-11 16:32:07.
+  usage: extract_orthogroups_cds.py [-h] -s SCO_LIST -r ORTHOGROUPS_TSV -c CDS_IN_DIR
+                                  [-o OUT_DIR]
+
+  options:
+    -h, --help            show this help message and exit
+    -s SCO_LIST, --sco-list SCO_LIST
+                          (str) Path to orthofinder
+                          Orthogroups/Orthogroups_SingleCopyOrthologues.txt file.
+    -r ORTHOGROUPS_TSV, --orthogroups-tsv ORTHOGROUPS_TSV
+                          (str) Path to the orthofinder Orthogroups/Orthogroups.tsv
+    -c CDS_IN_DIR, --cds-in-dir CDS_IN_DIR
+                          (str) Path to the directory containing the input per-taxon CDS
+                          sequences.
+    -o OUT_DIR, --out-dir OUT_DIR
+                          (str) Path to output directory [default=./].
+```
+
+### Output table
+
+This is reformatting the Orthofinder `Orthogroups/Orthogroups.tsv` to include only 
+single-copy orthogroups, one gene/transcript per line.
+
+```sh
+#OrthogroupID  Taxon     TranscriptID
+OG0004756      Species1  mrna-16824
+OG0004756      Species2  mrna-9033
+OG0004756      Species3  mrna-5845
+OG0004756      Species4  mrna-6124
+OG0004756      Species5  mrna-33735
+OG0004765      Species1  mrna-32745
+OG0004765      Species2  mrna-15598
+OG0004765      Species3  mrna-13968
+OG0004765      Species4  mrna-15215
+OG0004765      Species5  mrna-345
+```
+
+### Output FASTA
+
+An output FASTA is created for each single-copy orthogroup. The sequence IDs of each CDS
+sequence correspond to their respective taxon (done for compatibility reasons).
+
+```sh
+$ cat out/OG0004756.cds.fa
+  >Species1
+  ATGATCACTGTCCTGCTGCCGGAGGAGCTGACAAGGCAGCAGCAGGGCTC
+  >Species2
+  ATGTCTCACAGGTTCCTCGAGTCTGTTAACGACTGCTTTCTCACCCAACA
+  >Species3
+  ATGATCACTGTGCTGCTGCCGGAGGAGCTGGCCGGCCAGCAGCAGGGCTC
+  >Species4
+  ATGCTCCGACCCGTCCCGACACAAGGTCCGACCCGTCCCGACACACGGTC
+  >Species5
+  ATGCAGCGCCACCGCTCGGTCGTCTGGCTGAGCTGCGCCACGGCGCTCGT
+```
+
 ## Author
 
 Angel G. Rivera-Colón  
