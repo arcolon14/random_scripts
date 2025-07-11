@@ -11,8 +11,8 @@ def parse_args(prog=PROG):
     p = argparse.ArgumentParser()
     p.add_argument('-s', '--sco-list', required=True, 
                    help='(str) Path to orthofinder Orthogroups/Orthogroups_SingleCopyOrthologues.txt file.')
-    p.add_argument('-n', '--n-zero-tsv', required=True, 
-                   help='(str) Path to the orthofinder N0 hierarchical orthogroup file.')
+    p.add_argument('-r', '--orthogroups-tsv', required=True, 
+                   help='(str) Path to the orthofinder Orthogroups/Orthogroups.tsv ')
     p.add_argument('-c', '--cds-in-dir', required=True, 
                    help='(str) Path to the directory containing the input per-taxon CDS sequences.')
     p.add_argument('-o', '--out-dir', required=False, default='.',
@@ -20,7 +20,7 @@ def parse_args(prog=PROG):
     # Check inputs
     args = p.parse_args()
     assert os.path.exists(args.sco_list)
-    assert os.path.exists(args.n_zero_tsv)
+    assert os.path.exists(args.orthogroups_tsv)
     assert os.path.exists(args.cds_in_dir)
     args.out_dir = args.out_dir.rstrip('/')
     assert os.path.exists(args.out_dir)
@@ -56,9 +56,11 @@ def load_sco_ids(sco_f:str)->list:
             if not line.startswith('OG'):
                 sys.exit(f'Error: {line} is invalid orthogroup ID. They must start with OG[...].')
             sco_ids.append(line)
-    print(f'    Loaded {len(sco_ids):,} SCO IDs from input file.')
+    print(f'    Loaded {len(sco_ids):,} SCO IDs from Orthogroups_SingleCopyOrthologues.txt input file.')
     return sco_ids
 
+# This is now deprecated and superseded by parse_orthogroups_table()
+# Orthofinder >3.1.0. Keeping it here for future compatibility.
 def parse_n0_table(n0_tsv_f:str, sco_ids:list, out_dir:str)->dict:
     '''
     Parse the orthofinder N0 table and extract the per-taxon transcript IDs
@@ -72,7 +74,7 @@ def parse_n0_table(n0_tsv_f:str, sco_ids:list, out_dir:str)->dict:
             transcript_ids = { taxon_1 : [(transcript_1, ortholog_id_1), (transcript_2, ortholog_id_2)],
                                taxon_2 : [(transcript_1, ortholog_id_1), (transcript_2, ortholog_id_2)]}
     '''
-    print('\nParsing the orthoginder N0 table...')
+    print('\nParsing the orthofinder N0 table...')
     records = 0
     kept = 0
     taxa = list()
@@ -126,6 +128,77 @@ def parse_n0_table(n0_tsv_f:str, sco_ids:list, out_dir:str)->dict:
                     # print(hog_id, taxon, gene)
                 kept += 1
     print(f'    Retained {kept:,} hierarchical orthogroups from the N0 table.', flush=True)
+    return transcript_ids
+
+def parse_orthogroups_table(orthogroups_tsv_f:str, sco_ids:list)->dict:
+    '''
+    Parse the orthofinder Orthogroups/Orthogroups.tsv table and extract the 
+    per-taxon transcript IDs for each Single-Copy Orthogroup.
+    Args:
+        orthogroups_tsv_f: (str) Path to the Orthogroups.tsv file
+        sco_ids: (list) List of single-copy ortholog IDs
+    Returns:
+        transcript_ids: (dict) Dictionary of per-taxon transcript IDs.
+            transcript_ids = { taxon_1 : [ (transcript_1, ortholog_id_1),
+                                           (transcript_2, ortholog_id_2) ],
+                               taxon_2 : [ (transcript_1, ortholog_id_1),
+                                           (transcript_2, ortholog_id_2) ] }
+    '''
+    print('\nParsing the orthofinder Orthogroups.tsv table...')
+    records = 0
+    kept = list()
+    taxa = list()
+    scos = set(sco_ids) # To make checking faster
+    # Main output
+    transcript_ids = dict()
+    with open(orthogroups_tsv_f) as fh:
+        for i, line in enumerate(fh):
+            line = line.strip('\n')
+            if line.endswith('\r'):
+                line = line.strip('\r')
+            if line.startswith('#') or len(line)==0:
+                continue
+            fields = line.split('\t')
+            # Parse the specific header and extract the taxon IDs
+            if line.startswith('Orthogroup\t'):
+                for taxon in fields[1:]:
+                    taxa.append(taxon)
+                print(f'    Parsing data for {len(taxa):,} input taxa:')
+                for t in taxa:
+                    print(f'        {t}')
+                continue
+            # Parse all the other lines
+            records += 1
+            ortholog_id = fields[0]
+            transcripts = fields[1:]
+            # Loop over the trabscript IDs per taxon and tally them
+            keep = True
+            for spp_trans in transcripts:
+                n_trans = 0
+                for transcript in spp_trans.split(' '):
+                    transcript = transcript.rstrip(',').rstrip('\'').lstrip('\'')
+                    if len(transcript) > 0:
+                        n_trans += 1
+                # Only keep if a single gene/transcript was seen
+                if n_trans != 1:
+                    keep = False
+                    continue
+            # Only process the orthogroups kept
+            if keep:
+                # First, make sure it is in the SCO list (they should)
+                if ortholog_id not in scos:
+                    continue
+                for j, transcript in enumerate(transcripts):
+                    taxon = taxa[j]
+                    # Add to the dictionary
+                    transcript_ids.setdefault(taxon, list())
+                    transcript_ids[taxon].append((transcript, ortholog_id))
+                kept.append(ortholog_id)
+    # Check that the number and identity of kept orthogroups and input orthogroups
+    if scos != set(kept):
+        # if kept != len(sco_ids):
+        sys.exit(f'Error: The number of identified Single-Copy Orthogroups from the Orthogroups.tsv table ({len(kept):,}) does not match the number of orthogroups from the SingleCopyOrthogroups.tsv table ({len(sco_ids):,}).')
+    print(f'    Retained {len(kept):,} orthogroups from the Orthogroups.tsv table.', flush=True)
     return transcript_ids
 
 def parse_taxon_transcripts(taxon_id:str, cds_fa_path:str, transcript_ids:set)->dict:
@@ -256,7 +329,6 @@ def group_sco_sequences(transcript_ids:dict, taxon_cds:dict,
                     if sequence is None:
                         sys.exit(f'Error: {trans_id} transcript not found for {taxon}.')
                     # Prepare the new FASTA record
-                    # fa_fh.write(f'>{trans_id}_{taxon}\n')
                     fa_fh.write(f'>{taxon}\n')
                     # Wrap the sequence lines up to `fa_line_width` characters
                     for start in range(0, len(sequence), fa_line_width):
@@ -271,14 +343,13 @@ def main():
     # Parse args
     args = parse_args()
     # Loading target IDs
-    sco_ids = load_sco_ids(args.sco_id_list)
-    # Parse the N0 table
-    transcript_ids = parse_n0_table(args.n_zero_tsv, sco_ids, args.out_dir)
+    sco_ids = load_sco_ids(args.sco_list)
+    # Parse the orthogroups table
+    transcript_ids = parse_orthogroups_table(args.orthogroups_tsv, sco_ids)
     # Load the per-taxon CDSs
     taxon_cds = load_taxon_cds(transcript_ids, args.cds_in_dir)
     # Prepare the outputs
     group_sco_sequences(transcript_ids, taxon_cds, args.out_dir)
-
 
     # Done!
     print(f'\n{PROG} finished on {date()} {time()}.')
