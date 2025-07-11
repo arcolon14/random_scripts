@@ -196,7 +196,6 @@ def parse_orthogroups_table(orthogroups_tsv_f:str, sco_ids:list)->dict:
                 kept.append(ortholog_id)
     # Check that the number and identity of kept orthogroups and input orthogroups
     if scos != set(kept):
-        # if kept != len(sco_ids):
         sys.exit(f'Error: The number of identified Single-Copy Orthogroups from the Orthogroups.tsv table ({len(kept):,}) does not match the number of orthogroups from the SingleCopyOrthogroups.tsv table ({len(sco_ids):,}).')
     print(f'    Retained {len(kept):,} orthogroups from the Orthogroups.tsv table.', flush=True)
     return transcript_ids
@@ -312,7 +311,7 @@ def group_sco_sequences(transcript_ids:dict, taxon_cds:dict,
     print('\nGrouping sequences and processing outputs...')
     # Create a table for summarizing the transcript-orthogroup relationships
     with open(f'{out_dir}/sco_transcripts.tsv', 'w') as tsv_fh:
-        tsv_fh.write('#HOG_orthogroup\tTaxon\tTranscriptID\n')
+        tsv_fh.write('#OrthogroupID\tTaxon\tTranscriptID\n')
         # First, you have to re-organize the transcript IDs to be per orthogroup.
         orthogroup_transcripts = regroup_transcripts(transcript_ids)
         # Loop across each orthogroup and extract its sequences.
