@@ -5,6 +5,7 @@ from datetime import datetime
 # Some constants
 PROG = sys.argv[0].split('/')[-1]
 FA_LINE_WIDTH = 60
+STOP_CODONS = ['TAG', 'TAA', 'TGA']
 
 def parse_args(prog=PROG):
     '''Set and verify command line options.'''
@@ -296,7 +297,8 @@ def regroup_transcripts(transcript_ids:dict)->dict:
     return orthogroup_transcripts
 
 def group_sco_sequences(transcript_ids:dict, taxon_cds:dict,
-                        out_dir:str, fa_line_width:int=FA_LINE_WIDTH)->None:
+                        out_dir:str, stop_codons:list=STOP_CODONS,
+                        fa_line_width:int=FA_LINE_WIDTH)->None:
     '''
     Group the taxon CDS sequences for each single-copy ortholog, and save as 
     individual FASTAs.
@@ -304,6 +306,7 @@ def group_sco_sequences(transcript_ids:dict, taxon_cds:dict,
         transcript_ids: (dict) Dictionary of per-taxon transcript IDs.
         taxon_cds: (dict) Dictionary of per-taxon coding sequences.
         out_dir: (str) Path to output directory to save the FASTA.
+        stop_codons: (list) List of stop codons to be checked and removed
         fa_line_width: (int) Line width for output FASTA.
     Returns:
         None
@@ -327,6 +330,9 @@ def group_sco_sequences(transcript_ids:dict, taxon_cds:dict,
                     sequence = taxon_cds[taxon].get(trans_id, None)
                     if sequence is None:
                         sys.exit(f'Error: {trans_id} transcript not found for {taxon}.')
+                    # Remove stop codons, if present.
+                    if sequence[-3:] in stop_codons:
+                        sequence = sequence[:-3]
                     # Prepare the new FASTA record
                     fa_fh.write(f'>{taxon}\n')
                     # Wrap the sequence lines up to `fa_line_width` characters
