@@ -62,7 +62,7 @@ def parse_sco_list(sco_f:str)->dict:
     sco_dict = {}
     records = 0
     taxa = []
-    with open(sco_f, 'r') as fh:
+    with open(sco_f, 'r', encoding='utf-8') as fh:
         for line in fh:
             line = line.strip('\n')
             if line.startswith('#') or len(line)==0:
@@ -98,10 +98,9 @@ def parse_busted_outputs(sco_list:dict, hyphy_outs:str, out_dir:str)->None:
     n_signif = 0
     # Generate output file
     out_file = f'{out_dir}/parsed_BUSTED.tsv'
-    with open(out_file, 'w') as fh:
+    with open(out_file, 'w', encoding='utf-8') as fh:
         # Write header
-        # TODO: Add needed columns
-        fh.write('Orthogroup\tTaxon\tGeneID\tAlnLen\tSignifBranch\tCorrPVal\tLRT\n')
+        fh.write('Orthogroup\tAlnLen\tpVal\tLRT\tdNRate\tdSRate\tRatesClasses\tOmegas\tProportions\n')
 
         # Loop through each orthogroup in the sco_list
         for sco_id in sco_list:
@@ -117,13 +116,14 @@ def parse_busted_outputs(sco_list:dict, hyphy_outs:str, out_dir:str)->None:
             if signif:
                 n_signif += 1
             n_found += 1
-            # Save to the ouput file
+            # # Save to the ouput file
             for row in busted_model_outs:
-                fh.write(row)
+                fh.write(f'{row}\n')
     print(f'    Found and extracted BUSTED results for {n_found:,} orthogroups.', flush=True)
     print(f'    A total of {n_signif:,} showed evidence of selection on any branch based on BUSTED\'s model.', flush=True)
 
-def read_busted_file(busted_file:str, sco_id:str, sco_genes:dict, alpha=ALPHA)->list:
+def read_busted_file(busted_file:str, sco_id:str,
+                     sco_genes:dict, alpha=ALPHA)->tuple[list, bool]:
     '''
     Read and parse BUSTED output json file.
     Args:
@@ -137,18 +137,108 @@ def read_busted_file(busted_file:str, sco_id:str, sco_genes:dict, alpha=ALPHA)->
     '''
     model_outs = []
     signif = False
-    with open(busted_file, 'r') as fh:
-        busted_data = json.load(fh)
+    with open(busted_file, 'r', encoding='utf-8') as fh:
+        busted_data = None
+        try:
+            busted_data = json.load(fh)
+        except json.decoder.JSONDecodeError:
+            print(f'Error opening JSON file:\n   {busted_file}')
+            return model_outs, signif
 
         # Check the general test results to see if significant
+        # e.g., {'LRT': 3.544529959022839, 'p-value': 0.08497381231907608}
         test_results = busted_data['test results']
-        print(test_results)
-        # TODO: Continue parsing the BUSTED file.
+        p_val = test_results['p-value']
+        if p_val < alpha:
+            signif = True
+        lrt = test_results['LRT']
 
+        # Check the input to get the alignment lengths
+        # e.g., {'file name': 'input_msa.fa', 'number of sequences': 5,
+        #        'number of sites': 425, 'partition count': 1,
+        # 'trees': {'0': '((SpA:0.0394154,SpB:0.0554306)Node3:0.0567855,
+        #                  (SpC:0.103642,SpD:0.0897399)Node6:0.0363832,
+        #                   SpE:0.106333)'}}
+        inputs = busted_data['input']
+        aln_len = inputs['number of sites']
+
+        # Now check the model fits, giving the results for each model:
+        fits = busted_data['fits']
+        # Use the MG94xREV model for the base dN and dS. Only get this 
+        # for the test branches.
+        # e.g., {'AIC-c': 4975.938122681358,
+        #        'Equilibrium frequencies': [[0.001861577769369592], 
+        #                                    [0.03757088064092833],
+        #                                    [0.005532490987598704]], 
+        #        'Log Likelihood': -2465.589181460799,
+        #        'Rate Distributions': {
+        #            'non-synonymous/synonymous rate ratio for *test*':
+        #                [[0.06035630417621526, 1]]},
+        #            'display order': 1,
+        #            'estimated parameters': 22}
+        MG94 = fits['MG94xREV with separate rates for branch sets']
+        MG94_rates = MG94["Rate Distributions"]
+        test_dNdS = MG94_rates['non-synonymous/synonymous rate ratio for *test*']
+        dN = test_dNdS[0][0]
+        dS = test_dNdS[0][1]
+
+        # The unconstrained model has the test for selection and
+        # the different omega classes and proportions.
+        # e.g., {'AIC-c': 4935.865370441084,
+        #        'Log Likelihood': -2431.977416077251,
+        #        'Rate Distributions':
+        #            {'Fraction of subs rate at which 2 nucleotides are changed instantly within a single codon': 0.05455169758041405,
+        #             'Fraction of subs rate at which 3 nucleotides are changed instantly within a single codon': 0,
+        #             'Synonymous site-to-site rates':
+        #                {'0': {'proportion': 0.04510362881014776,
+        #                       'rate': 0.5445440632195782},
+        #                 '1': {'proportion': 0.7287629584370342,
+        #                       'rate': 0.5494982567102917},
+        #                 '2': {'proportion': 0.226133412752818,
+        #                       'rate': 2.542680908964543}},
+        #             'Test':
+        #                {'0': {'omega': 103.0101200441636,
+        #                       'proportion': 0},
+        #                 '1': {'omega': 0.02623539740743567,
+        #                       'proportion': 0.0074},
+        #                 '2': {'omega': 0.02901545646577489,
+        #                       'proportion': 0.9926},
+        #                 '3': {'omega': 3.177397188214134,
+        #                       'proportion': 0}},
+        #              'rate at which 2 nucleotides are changed instantly within a single codon':
+        #                 1.298474087142876,
+        #              'rate at which 3 nucleotides are changed instantly within a single codon':
+        #                 0},
+        #       'display order': 2,
+        #       'estimated parameters': 35}
+        unconstrained = fits['Unconstrained model']
+        uncons_rates = unconstrained["Rate Distributions"]
+        # Similarly, we only want this for the test branches
+        uncons_test = uncons_rates['Test']
+        omegas = []
+        proportions = []
+        # The model will have multiple omega classes, so loop over them
+        for omega_class in uncons_test:
+            omegas.append(f'{uncons_test[omega_class]["omega"]}')
+            proportions.append(f'{uncons_test[omega_class]["proportion"]}')
+        assert len(omegas)==len(proportions)
+
+        # Format into a new row and add to the model outputs
+        row = [f'{sco_id}',
+               f'{aln_len}',
+               f'{p_val}',
+               f'{lrt}',
+               f'{dN}',
+               f'{dS}',
+               f'{len(omegas)}',
+               f'{";".join(omegas)}',
+               f'{";".join(proportions)}']
+        row = '\t'.join(row)
+        model_outs.append(row)
     return model_outs, signif
 
-
-def read_absrel_file(absrel_file:str, sco_id:str, sco_genes:dict)->list:
+def read_absrel_file(absrel_file:str, sco_id:str,
+                     sco_genes:dict)->tuple[list, bool]:
     '''
     Read and parse aBSREL output json file.
     Args:
@@ -161,8 +251,13 @@ def read_absrel_file(absrel_file:str, sco_id:str, sco_genes:dict)->list:
     '''
     model_outs = []
     signif = False
-    with open(absrel_file, 'r') as fh:
-        absrel_data = json.load(fh)
+    with open(absrel_file, 'r', encoding='utf-8') as fh:
+        absrel_data = None
+        try:
+            absrel_data = json.load(fh)
+        except json.decoder.JSONDecodeError:
+            print(f'Error opening JSON file:\n   {absrel_file}')
+            return model_outs, signif
 
         # Check the general test results to see if significant
         # e.g., {'P-value threshold': 0.05, 'positive test results': 0, 'tested': 5}
@@ -176,8 +271,9 @@ def read_absrel_file(absrel_file:str, sco_id:str, sco_genes:dict)->list:
         # Check the inputs of the model to check for alignment length
         # e.g., {'file name': 'input_msa.fa', 'number of sequences': 5,
         #        'number of sites': 588, 'partition count': 1,
-        #        'trees': {'0': '((A:0.0394154,B:0.0554306)Node3:0.0567855,
-        #                         (C:0.103642,D:0.0897399)Node6:0.0363832,E:0.106333)'}}
+        #        'trees': {'0': '((SpA:0.0394154,SpB:0.0554306)
+        #                          Node3:0.0567855,(SpC:0.103642,D:0.0897399)
+        #                          Node6:0.0363832,SpE:0.106333)'}}
         inputs = absrel_data['input']
         aln_len = inputs['number of sites']
 
@@ -207,8 +303,10 @@ def read_absrel_file(absrel_file:str, sco_id:str, sco_genes:dict)->list:
             #        'Rate classes': 1,
             #        'Uncorrected P-value': 1,
             #        'original name': 'Name',
-            #        'rate at which 2 nucleotides are changed instantly within a single codon': 0.9084505089461798,
-            #        'rate at which 3 nucleotides are changed instantly within a single codon': 2.546331370694687}
+            #        'rate at which 2 nucleotides are changed instantly within a single codon':
+            #               0.9084505089461798,
+            #        'rate at which 3 nucleotides are changed instantly within a single codon':
+            #               2.546331370694687}
             corr_p_val = taxon_attrs['Corrected P-value']
             lrt = taxon_attrs['LRT']
             nonsyn_site = taxon_attrs['Full adaptive model (non-synonymous subs/site)']
@@ -244,7 +342,7 @@ def parse_absrel_outputs(sco_list:dict, hyphy_outs:str, out_dir:str)->None:
     n_signif = 0
     # Generate output file
     out_file = f'{out_dir}/parsed_aBSREL.tsv'
-    with open(out_file, 'w') as fh:
+    with open(out_file, 'w', encoding='utf-8') as fh:
         # Write header
         fh.write('Orthogroup\tTaxon\tGeneID\tAlnLen\tSignifBranch\tCorrPVal\tLRT\tOmegaRatio\tNonSynSite\tSynSite\tRateClasses\tRateDists\n')
 
@@ -285,9 +383,7 @@ def parse_hyphy_outs(sco_list:dict, hyphy_outs:str, out_dir:str, analysis_type:l
             parse_absrel_outputs(sco_list, hyphy_outs, out_dir)
         elif analysis == 'BUSTED':
             # Parse BUSTED output files
-            # TODO: Implement BUSTED output parsing
             parse_busted_outputs(sco_list, hyphy_outs, out_dir)
-            continue
 
 def main():
     '''
