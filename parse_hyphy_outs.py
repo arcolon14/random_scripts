@@ -15,7 +15,8 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument('-s', '--sco-list',
                    required=True,
-                   help='(str) Path to orthofinder Orthogroups/Orthogroups_SingleCopyOrthologues.txt file.')
+                   help='(str) Path to orthofinder \
+                    Orthogroups/Orthogroups_SingleCopyOrthologues.txt file.')
     p.add_argument('-y', '--hyphy-outs',
                    required=True,
                    help='(str) Path to the HyPhy output files directory.')
@@ -27,7 +28,8 @@ def parse_args():
                    choices=VALID_ANALYSES,
                    nargs='+',
                    default=['aBSREL'],
-                   help='(str) Type of HyPhy analysis to parse [choices: aBSREL, BUSTED] [default=aBSREL].')
+                   help='(str) Type of HyPhy analysis to parse [choices: \
+                       aBSREL, BUSTED] [default=aBSREL].')
     # Check inputs
     args = p.parse_args()
     assert os.path.exists(args.sco_list)
@@ -100,7 +102,8 @@ def parse_busted_outputs(sco_list:dict, hyphy_outs:str, out_dir:str)->None:
     out_file = f'{out_dir}/parsed_BUSTED.tsv'
     with open(out_file, 'w', encoding='utf-8') as fh:
         # Write header
-        fh.write('Orthogroup\tAlnLen\tpVal\tLRT\tdNRate\tdSRate\tRatesClasses\tOmegas\tProportions\n')
+        fh.write('Orthogroup\tAlnLen\tpVal\tLRT\tdNRate\tdSRate\tRatesClasses\
+                 \tOmegas\tProportions\n')
 
         # Loop through each orthogroup in the sco_list
         for sco_id in sco_list:
@@ -120,7 +123,8 @@ def parse_busted_outputs(sco_list:dict, hyphy_outs:str, out_dir:str)->None:
             for row in busted_model_outs:
                 fh.write(f'{row}\n')
     print(f'    Found and extracted BUSTED results for {n_found:,} orthogroups.', flush=True)
-    print(f'    A total of {n_signif:,} showed evidence of selection on any branch based on BUSTED\'s model.', flush=True)
+    print(f'    A total of {n_signif:,} showed evidence of selection on any \
+                branch based on BUSTED\'s model.', flush=True)
 
 def read_busted_file(busted_file:str, sco_id:str,
                      sco_genes:dict, alpha=ALPHA)->tuple[list, bool]:
@@ -164,12 +168,12 @@ def read_busted_file(busted_file:str, sco_id:str,
 
         # Now check the model fits, giving the results for each model:
         fits = busted_data['fits']
-        # Use the MG94xREV model for the base dN and dS. Only get this 
+        # Use the MG94xREV model for the base dN and dS. Only get this
         # for the test branches.
         # e.g., {'AIC-c': 4975.938122681358,
-        #        'Equilibrium frequencies': [[0.001861577769369592], 
+        #        'Equilibrium frequencies': [[0.001861577769369592],
         #                                    [0.03757088064092833],
-        #                                    [0.005532490987598704]], 
+        #                                    [0.005532490987598704]],
         #        'Log Likelihood': -2465.589181460799,
         #        'Rate Distributions': {
         #            'non-synonymous/synonymous rate ratio for *test*':
@@ -187,8 +191,10 @@ def read_busted_file(busted_file:str, sco_id:str,
         # e.g., {'AIC-c': 4935.865370441084,
         #        'Log Likelihood': -2431.977416077251,
         #        'Rate Distributions':
-        #            {'Fraction of subs rate at which 2 nucleotides are changed instantly within a single codon': 0.05455169758041405,
-        #             'Fraction of subs rate at which 3 nucleotides are changed instantly within a single codon': 0,
+        #            {'Fraction of subs rate at which 2 nucleotides are changed
+        #                  instantly within a single codon': 0.05455169758041405,
+        #             'Fraction of subs rate at which 3 nucleotidesare changed
+        #                  instantly within a single codon': 0,
         #             'Synonymous site-to-site rates':
         #                {'0': {'proportion': 0.04510362881014776,
         #                       'rate': 0.5445440632195782},
@@ -205,10 +211,10 @@ def read_busted_file(busted_file:str, sco_id:str,
         #                       'proportion': 0.9926},
         #                 '3': {'omega': 3.177397188214134,
         #                       'proportion': 0}},
-        #              'rate at which 2 nucleotides are changed instantly within a single codon':
-        #                 1.298474087142876,
-        #              'rate at which 3 nucleotides are changed instantly within a single codon':
-        #                 0},
+        #              'rate at which 2 nucleotides are changed instantly
+        #                 within a single codon': 1.298474087142876,
+        #              'rate at which 3 nucleotides are changed instantly
+        #                 within a single codon': 0},
         #       'display order': 2,
         #       'estimated parameters': 35}
         unconstrained = fits['Unconstrained model']
@@ -344,7 +350,9 @@ def parse_absrel_outputs(sco_list:dict, hyphy_outs:str, out_dir:str)->None:
     out_file = f'{out_dir}/parsed_aBSREL.tsv'
     with open(out_file, 'w', encoding='utf-8') as fh:
         # Write header
-        fh.write('Orthogroup\tTaxon\tGeneID\tAlnLen\tSignifBranch\tCorrPVal\tLRT\tOmegaRatio\tNonSynSite\tSynSite\tRateClasses\tRateDists\n')
+        fh.write('Orthogroup\tTaxon\tGeneID\tAlnLen\tSignifBranch\
+                 \tCorrPVal\tLRT\tOmegaRatio\tNonSynSite\tSynSite\
+                 \tRateClasses\tRateDists\n')
 
         # Loop through each orthogroup in the sco_list
         for sco_id in sco_list:
@@ -364,7 +372,8 @@ def parse_absrel_outputs(sco_list:dict, hyphy_outs:str, out_dir:str)->None:
             for row in absrel_model_outs:
                 fh.write(row)
     print(f'    Found and extracted aBSREL results for {n_found:,} orthogroups.', flush=True)
-    print(f'    A total of {n_signif:,} showed evidence of selection on any branch based on aBSREL\'s model.', flush=True)
+    print(f'    A total of {n_signif:,} showed evidence of selection on any \
+                branch based on aBSREL\'s model.', flush=True)
 
 def parse_hyphy_outs(sco_list:dict, hyphy_outs:str, out_dir:str, analysis_type:list)->None:
     '''
