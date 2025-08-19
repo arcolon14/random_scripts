@@ -303,18 +303,24 @@ def read_absrel_file(absrel_file:str, sco_id:str, sco_genes:dict,
         if aln_len<min_aln_len:
             return model_outs, signif
 
+        # Determine the branches that were tested. Used to check the
+        # branch-specific attributes in the next step.
+        tested_branches = []
+        branches = absrel_data['tested']['0']
+        for branch in branches:
+            if branches[branch] == 'test':
+                tested_branches.append(branch)
+
         # Check the per-taxon branch attributes. These have the per-taxon results
         # of the model.
         taxon_branch_attributes = absrel_data['branch attributes']['0']
-        # Loop over each taxon
-        for taxon in taxon_branch_attributes:
-            # First, choose the branches corresponding to the focal taxa
-            if taxon not in sco_genes:
-                continue
-            # Then, select the gene for target taxon
-            gene = sco_genes.get(taxon, None)
-            if gene is None:
-                sys.exit(f'Error: Taxon ({taxon}) mismatch in orthogroup {sco_id}.')
+
+        # Loop over each tested taxon taxon
+        for taxon in tested_branches:
+            # First, See if the taxon is among the "named" taxa or
+            # part of an internal branch. If an internal branch, the
+            # target gene is "NaN".
+            gene = sco_genes.get(taxon, 'NaN')
             signif_branch = 0
             taxon_attrs = taxon_branch_attributes[taxon]
             # e.g., {'Baseline MG94xREV': 0.4675796811578989,
