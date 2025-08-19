@@ -1,4 +1,5 @@
 # random_scripts
+
 Just for random scripts that might have no other place... for now.
 
 ## Script to process phastCon results along with annotations
@@ -96,6 +97,30 @@ $ cat out/OG0004756.cds.fa
   ATGCTCCGACCCGTCCCGACACAAGGTCCGACCCGTCCCGACACACGGTC
   >Species5
   ATGCAGCGCCACCGCTCGGTCGTCTGGCTGAGCTGCGCCACGGCGCTCGT
+```
+
+## Parse outputs from `HyPhy`
+
+```sh
+$ python3 parse_hyphy_outs.py -h
+  parse_hyphy_outs.py started on 2025-08-19 12:09:30.
+  usage: parse_hyphy_outs.py [-h] -s SCO_LIST -y HYPHY_OUTS [-o OUT_DIR]
+                           [-a {aBSREL,BUSTED} [{aBSREL,BUSTED} ...]] [-m MIN_ALN_LEN]
+
+  options:
+    -h, --help            show this help message and exit
+    -s SCO_LIST, --sco-list SCO_LIST
+                          (str) Path to orthofinder
+                          Orthogroups/Orthogroups_SingleCopyOrthologues.txt file.
+    -y HYPHY_OUTS, --hyphy-outs HYPHY_OUTS
+                          (str) Path to the HyPhy output files directory.
+    -o OUT_DIR, --out-dir OUT_DIR
+                          (str) Path to output directory [default=./].
+    -a {aBSREL,BUSTED} [{aBSREL,BUSTED} ...], --analysis-type {aBSREL,BUSTED} [{aBSREL,BUSTED} ...]
+                          (str) Type of HyPhy analysis to parse [choices: aBSREL, BUSTED]
+                          [default=aBSREL].
+    -m MIN_ALN_LEN, --min-aln-len MIN_ALN_LEN
+                          (int) Minimum length required to keep an alignment [default=24]
 ```
 
 ## Author
