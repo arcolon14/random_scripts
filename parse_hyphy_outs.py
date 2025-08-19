@@ -16,8 +16,8 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument('-s', '--sco-list',
                    required=True,
-                   help='(str) Path to orthofinder \
-                    Orthogroups/Orthogroups_SingleCopyOrthologues.txt file.')
+                   help='(str) Path to the single-copy orthgroup table \
+                    (produced by `extract_orthogroups_cds.py`).')
     p.add_argument('-y', '--hyphy-outs',
                    required=True,
                    help='(str) Path to the HyPhy output files directory.')
