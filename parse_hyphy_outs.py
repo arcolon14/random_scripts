@@ -9,6 +9,7 @@ from datetime import datetime
 PROG = sys.argv[0].split('/')[-1]
 VALID_ANALYSES = ['aBSREL', 'BUSTED']
 ALPHA = 0.05
+MIN_ALN_LEN = 24
 
 def parse_args():
     '''Set and verify command line options.'''
@@ -30,10 +31,17 @@ def parse_args():
                    default=['aBSREL'],
                    help='(str) Type of HyPhy analysis to parse [choices: \
                        aBSREL, BUSTED] [default=aBSREL].')
+    p.add_argument('-m', '--min-aln-len',
+                   required=False,
+                   type=int,
+                   default=MIN_ALN_LEN,
+                   help=f'(int) Minimum length required to keep an alignment\
+                    [default={MIN_ALN_LEN}]')
     # Check inputs
     args = p.parse_args()
     assert os.path.exists(args.sco_list)
     assert os.path.exists(args.hyphy_outs)
+    args.hyphy_outs = args.hyphy_outs.rstrip('/')
     args.out_dir = args.out_dir.rstrip('/')
     assert os.path.exists(args.out_dir)
     # Set some constants
@@ -86,7 +94,8 @@ def parse_sco_list(sco_f:str)->dict:
     print(f'    And {len(sco_dict):,} Single Copy Orthogroups.', flush=True)
     return sco_dict
 
-def parse_busted_outputs(sco_list:dict, hyphy_outs:str, out_dir:str)->None:
+def parse_busted_outputs(sco_list:dict, hyphy_outs:str, out_dir:str,
+                         min_aln_len:int=MIN_ALN_LEN)->None:
     '''
     Parse BUSTED output files.
     Args:
@@ -94,6 +103,8 @@ def parse_busted_outputs(sco_list:dict, hyphy_outs:str, out_dir:str)->None:
                          of taxon-gene IDs as values.
         hyphy_outs (str): Path to the HyPhy output files directory.
         out_dir (str): Path to output directory.
+        min_aln_len (int): Minimum length required to keep an alignment,
+                           default=MIN_ALN_LEN
     '''
     print('\nParsing BUSTED outputs...', flush=True)
     n_found = 0
@@ -107,7 +118,6 @@ def parse_busted_outputs(sco_list:dict, hyphy_outs:str, out_dir:str)->None:
 
         # Loop through each orthogroup in the sco_list
         for sco_id in sco_list:
-            sco_genes = sco_list[sco_id]
             # Select the target BUSTED output file
             busted_file = f'{hyphy_outs}/{sco_id}.BUSTED.json'
             # The BUSTED outputs are not going to be present for some
@@ -115,26 +125,29 @@ def parse_busted_outputs(sco_list:dict, hyphy_outs:str, out_dir:str)->None:
             if not os.path.exists(busted_file):
                 continue
             # Open the BUSTED output file and extract the results per taxa.
-            busted_model_outs, signif = read_busted_file(busted_file, sco_id, sco_genes)
+            busted_model_outs, signif = read_busted_file(busted_file, sco_id,
+                                                         min_aln_len=min_aln_len)
             if signif:
                 n_signif += 1
-            n_found += 1
-            # # Save to the ouput file
+            if len(busted_model_outs)>0:
+                n_found += 1
+            # Save to the ouput file
             for row in busted_model_outs:
                 fh.write(f'{row}\n')
     print(f'    Found and extracted BUSTED results for {n_found:,} orthogroups.', flush=True)
-    print(f'    A total of {n_signif:,} showed evidence of selection on any \
-                branch based on BUSTED\'s model.', flush=True)
+    print(f'    A total of {n_signif:,} orthogroups showed evidence of selection on any \
+branch based on BUSTED\'s model.', flush=True)
 
-def read_busted_file(busted_file:str, sco_id:str,
-                     sco_genes:dict, alpha=ALPHA)->tuple[list, bool]:
+def read_busted_file(busted_file:str, sco_id:str, alpha=ALPHA,
+                     min_aln_len:int=MIN_ALN_LEN)->tuple[list, bool]:
     '''
     Read and parse BUSTED output json file.
     Args:
         busted_file (str): Path to the BUSTED output file.
         scp_id (str): ID for the single-copy orthogroup
-        sco_genes (dict): Dictionary with taxon-gene IDs for the orthogroup.
         alpha (float): p-value threshold for significance [default=0.05]
+        min_aln_len (int): Minimum length required to keep an 
+                           alignment, default=MIN_ALN_LEN
     Returns:
         model_outs (list): list of the parsed BUSTED outputs per taxa
         signif (bool): Is there significant evidence of selection in *any* branch?
@@ -146,7 +159,7 @@ def read_busted_file(busted_file:str, sco_id:str,
         try:
             busted_data = json.load(fh)
         except json.decoder.JSONDecodeError:
-            print(f'Error opening JSON file:\n   {busted_file}')
+            print(f'Error opening JSON file:\n    {busted_file}')
             return model_outs, signif
 
         # Check the general test results to see if significant
@@ -165,6 +178,8 @@ def read_busted_file(busted_file:str, sco_id:str,
         #                   SpE:0.106333)'}}
         inputs = busted_data['input']
         aln_len = inputs['number of sites']
+        if aln_len<min_aln_len:
+            return model_outs, signif
 
         # Now check the model fits, giving the results for each model:
         fits = busted_data['fits']
@@ -243,17 +258,20 @@ def read_busted_file(busted_file:str, sco_id:str,
         model_outs.append(row)
     return model_outs, signif
 
-def read_absrel_file(absrel_file:str, sco_id:str,
-                     sco_genes:dict)->tuple[list, bool]:
+def read_absrel_file(absrel_file:str, sco_id:str, sco_genes:dict,
+                     min_aln_len:int=MIN_ALN_LEN)->tuple[list, bool]:
     '''
     Read and parse aBSREL output json file.
     Args:
         absrel_file (str): Path to the aBSREL output file.
         scp_id (str): ID for the single-copy orthogroup
         sco_genes (dict): Dictionary with taxon-gene IDs for the orthogroup.
+        min_aln_len (int): Minimum length required to keep an 
+                           alignment, default=MIN_ALN_LEN
     Returns:
         model_outs (list): list of the parsed aBSREL outputs per taxa
         signif (bool): Is there significant evidence of selection in *any* branch?
+        
     '''
     model_outs = []
     signif = False
@@ -262,7 +280,7 @@ def read_absrel_file(absrel_file:str, sco_id:str,
         try:
             absrel_data = json.load(fh)
         except json.decoder.JSONDecodeError:
-            print(f'Error opening JSON file:\n   {absrel_file}')
+            print(f'Error opening JSON file:\n    {absrel_file}')
             return model_outs, signif
 
         # Check the general test results to see if significant
@@ -282,6 +300,8 @@ def read_absrel_file(absrel_file:str, sco_id:str,
         #                          Node6:0.0363832,SpE:0.106333)'}}
         inputs = absrel_data['input']
         aln_len = inputs['number of sites']
+        if aln_len<min_aln_len:
+            return model_outs, signif
 
         # Check the per-taxon branch attributes. These have the per-taxon results
         # of the model.
@@ -334,7 +354,8 @@ def read_absrel_file(absrel_file:str, sco_id:str,
             model_outs.append(row)
     return model_outs, signif
 
-def parse_absrel_outputs(sco_list:dict, hyphy_outs:str, out_dir:str)->None:
+def parse_absrel_outputs(sco_list:dict, hyphy_outs:str, out_dir:str,
+                         min_aln_len:int=MIN_ALN_LEN)->None:
     '''
     Parse aBSREL output files.
     Args:
@@ -342,6 +363,8 @@ def parse_absrel_outputs(sco_list:dict, hyphy_outs:str, out_dir:str)->None:
                          of taxon-gene IDs as values.
         hyphy_outs (str): Path to the HyPhy output files directory.
         out_dir (str): Path to output directory.
+        min_aln_len (int): Minimum length required to keep an 
+                           alignment, default=MIN_ALN_LEN
     '''
     print('\nParsing aBSREL outputs...', flush=True)
     n_found = 0
@@ -364,18 +387,23 @@ def parse_absrel_outputs(sco_list:dict, hyphy_outs:str, out_dir:str)->None:
             if not os.path.exists(absrel_file):
                 continue
             # Open the aBSREL output file and extract the results per taxa.
-            absrel_model_outs, signif = read_absrel_file(absrel_file, sco_id, sco_genes)
+            absrel_model_outs, signif = read_absrel_file(absrel_file,
+                                                         sco_id, sco_genes,
+                                                         min_aln_len)
             if signif:
                 n_signif += 1
-            n_found += 1
+            if len(absrel_model_outs)>0:
+                n_found += 1
             # Save to the ouput file
             for row in absrel_model_outs:
                 fh.write(row)
     print(f'    Found and extracted aBSREL results for {n_found:,} orthogroups.', flush=True)
-    print(f'    A total of {n_signif:,} showed evidence of selection on any \
-                branch based on aBSREL\'s model.', flush=True)
+    print(f'    A total of {n_signif:,} orthogroups showed evidence of selection on any \
+branch based on aBSREL\'s model.', flush=True)
 
-def parse_hyphy_outs(sco_list:dict, hyphy_outs:str, out_dir:str, analysis_type:list)->None:
+def parse_hyphy_outs(sco_list:dict, hyphy_outs:str,
+                     out_dir:str, analysis_type:list,
+                     min_aln_len:int=MIN_ALN_LEN)->None:
     '''
     Parse HyPhy output files for the specified analysis type.
     Args:
@@ -384,15 +412,19 @@ def parse_hyphy_outs(sco_list:dict, hyphy_outs:str, out_dir:str, analysis_type:l
         hyphy_outs (str): Path to the HyPhy output files directory.
         out_dir (str): Path to output directory.
         analysis_type (list): List of HyPhy analysis types to parse.
+        min_aln_len (int): Minimum length required to keep an 
+                           alignment, default=MIN_ALN_LEN
     '''
     # Loop over the different analysis types and process accordingly
     for analysis in analysis_type:
         if analysis == 'aBSREL':
             # Parse aBSREL output files
-            parse_absrel_outputs(sco_list, hyphy_outs, out_dir)
+            parse_absrel_outputs(sco_list, hyphy_outs,
+                                 out_dir, min_aln_len)
         elif analysis == 'BUSTED':
             # Parse BUSTED output files
-            parse_busted_outputs(sco_list, hyphy_outs, out_dir)
+            parse_busted_outputs(sco_list, hyphy_outs,
+                                 out_dir, min_aln_len)
 
 def main():
     '''
@@ -410,7 +442,8 @@ def main():
     sco_list = parse_sco_list(args.sco_list)
 
     # Parse HyPhy output files
-    parse_hyphy_outs(sco_list, args.hyphy_outs, args.out_dir, args.analysis_type)
+    parse_hyphy_outs(sco_list, args.hyphy_outs, args.out_dir,
+                     args.analysis_type, args.min_aln_len)
 
     # Done!
     print(f'\n{PROG} finished on {date()} {time()}.')
