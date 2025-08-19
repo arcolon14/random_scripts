@@ -110,8 +110,8 @@ $ python3 parse_hyphy_outs.py -h
   options:
     -h, --help            show this help message and exit
     -s SCO_LIST, --sco-list SCO_LIST
-                          (str) Path to orthofinder
-                          Orthogroups/Orthogroups_SingleCopyOrthologues.txt file.
+                          (str) Path to the single-copy orthgroup table (produced by
+                          `extract_orthogroups_cds.py`).
     -y HYPHY_OUTS, --hyphy-outs HYPHY_OUTS
                           (str) Path to the HyPhy output files directory.
     -o OUT_DIR, --out-dir OUT_DIR
