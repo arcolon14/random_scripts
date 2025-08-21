@@ -9,7 +9,7 @@ from datetime import datetime
 PROG = sys.argv[0].split('/')[-1]
 VALID_ANALYSES = ['aBSREL', 'BUSTED']
 ALPHA = 0.05
-MIN_ALN_LEN = 24
+MIN_ALN_LEN = 8
 
 def parse_args():
     '''Set and verify command line options.'''
@@ -35,8 +35,8 @@ def parse_args():
                    required=False,
                    type=int,
                    default=MIN_ALN_LEN,
-                   help=f'(int) Minimum length required to keep an alignment\
-                    [default={MIN_ALN_LEN}]')
+                   help=f'(int) Minimum length (of codons) required to keep an \
+                    alignment [default={MIN_ALN_LEN}]')
     # Check inputs
     args = p.parse_args()
     assert os.path.exists(args.sco_list)
@@ -323,6 +323,7 @@ def read_absrel_file(absrel_file:str, sco_id:str, sco_genes:dict,
             gene = sco_genes.get(taxon, 'NaN')
             signif_branch = 0
             taxon_attrs = taxon_branch_attributes[taxon]
+
             # e.g., {'Baseline MG94xREV': 0.4675796811578989,
             #        'Baseline MG94xREV omega ratio': 0.05156506382256223,
             #        'Corrected P-value': 1,
@@ -341,8 +342,8 @@ def read_absrel_file(absrel_file:str, sco_id:str, sco_genes:dict,
             #               2.546331370694687}
             corr_p_val = taxon_attrs['Corrected P-value']
             lrt = taxon_attrs['LRT']
-            nonsyn_site = taxon_attrs['Full adaptive model (non-synonymous subs/site)']
-            syn_site = taxon_attrs['Full adaptive model (synonymous subs/site)']
+            nonsyn_site = taxon_attrs.get('Full adaptive model (non-synonymous subs/site)', 'NaN')
+            syn_site = taxon_attrs.get('Full adaptive model (synonymous subs/site)', 'NaN')
             omega_ratio = taxon_attrs['Baseline MG94xREV omega ratio']
             n_rate_classes = taxon_attrs['Rate classes']
             rate_distributions = taxon_attrs['Rate Distributions']
