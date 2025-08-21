@@ -162,14 +162,6 @@ def read_busted_file(busted_file:str, sco_id:str, alpha=ALPHA,
             print(f'Error opening JSON file:\n    {busted_file}')
             return model_outs, signif
 
-        # Check the general test results to see if significant
-        # e.g., {'LRT': 3.544529959022839, 'p-value': 0.08497381231907608}
-        test_results = busted_data['test results']
-        p_val = test_results['p-value']
-        if p_val < alpha:
-            signif = True
-        lrt = test_results['LRT']
-
         # Check the input to get the alignment lengths
         # e.g., {'file name': 'input_msa.fa', 'number of sequences': 5,
         #        'number of sites': 425, 'partition count': 1,
@@ -180,6 +172,14 @@ def read_busted_file(busted_file:str, sco_id:str, alpha=ALPHA,
         aln_len = inputs['number of sites']
         if aln_len<min_aln_len:
             return model_outs, signif
+
+        # Check the general test results to see if significant
+        # e.g., {'LRT': 3.544529959022839, 'p-value': 0.08497381231907608}
+        test_results = busted_data['test results']
+        p_val = test_results['p-value']
+        if p_val < alpha:
+            signif = True
+        lrt = test_results['LRT']
 
         # Now check the model fits, giving the results for each model:
         fits = busted_data['fits']
