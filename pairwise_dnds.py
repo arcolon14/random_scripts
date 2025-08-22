@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 from datetime import datetime
+from Bio import SeqIO
 import sys
 import os
 import argparse
+import math
 import dnds
-from Bio import SeqIO
 
 # Some constants
 PROG = sys.argv[0].split('/')[-1]
@@ -125,16 +126,62 @@ def extract_sequences(in_msa_f:str, ingroup:str)->tuple[str, str]:
             outgroup_seq = record.seq
     # The fasta must contain only two sequences.
     if count != 2:
-        sys.exit(f'Error: MSA FASTA {in_msa_f} does not have two sequences. Alignment must only be between a pair of ingroup and outgroup sequences.')
+        sys.exit(f'Error: MSA FASTA {in_msa_f} does not have two sequences.\
+Alignment must only be between a pair of ingroup and outgroup sequences.')
     # The FASTA must contain the ingroup
     if not ingroup_found:
-        sys.exit(f'Error: Ingroup sequence ID ({ingroup}) not found in input MSA FASTA ({in_msa_f})')
+        sys.exit(f'Error: Ingroup sequence ID ({ingroup}) not found in input MSA FASTA:\
+{in_msa_f}')
     # And the sequences must be of the same length
     if len(ingroup_seq) != len(outgroup_seq):
         sys.exit(f'Error: The sequences in {in_msa_f} are of unequal length.')
     return ingroup_seq, outgroup_seq
 
+def calculate_dnds(seq1:str, seq2:str)->list:
+    '''
+    Calculate synomynous vs non-synomymous rates between a
+    pair of sequences.
+    Args:
+        seq1 (str): Sequence, for ingroup
+        seq2 (str): Sequence, for outgroup
+    Returns:
+        dnds_out (list): List of the dN/dS output.
 
+    Based on the code by S. Small
+    '''
+    # Tally the number of synynymous vs non-synonymous
+    # sites
+    syn_sites = dnds.syn_sum(seq1, seq2)
+    non_sites = len(seq1) - syn_sites
+    # Tally the number of synynymous vs non-synonymous
+    # substitutions
+    syn_subs, non_subs = dnds.substitutions(seq1, seq2)
+    # Calculate the proportions to substitutions vs sites
+    pN = non_subs / non_sites
+    pS = syn_subs / syn_sites
+    # Calculate using the Jukes-Cantor correction
+    dN = -(3 / 4) * math.log(1 - (4 * pN / 3))
+    dS = -(3 / 4) * math.log(1 - (4 * pS / 3))
+    # Calculate the dN/dS ratio
+    dnds_rat = 0
+    if dS>0:
+        dnds_rat = dN/dS
+    # Prepare to return
+    # These two are type Fraction and not Float, and
+    # can cause some formatting issues downstream
+    non_sites = float(non_sites)
+    syn_sites = float(syn_sites)
+    # The rest leave as is.
+    dnds_out = [non_sites, # Number of non-syn sites
+                syn_sites, # Number of syn sites
+                non_subs,  # Number of non-syn subs
+                syn_subs,  # Number of syn subs
+                pN,        # Proportion of non-syn subs vs sites
+                pS,        # Proportion of syn subs vs sites
+                dN,        # Corrected proportion of non-syn subs vs sites
+                dS,        # Corrected proportion of syn subs vs sites
+                dnds_rat]  # dN/dS ratio
+    return dnds_out
 
 def process_orthogroups(sco_list:dict, ingroup:str, alignments:str,
                         outdir:str='.', min_aln_len:int=MIN_ALN_LEN,
@@ -158,8 +205,19 @@ def process_orthogroups(sco_list:dict, ingroup:str, alignments:str,
     # Prepare outputs
     out_tsv = f'{outdir}/pairwide_dNdS_{ingroup}.tsv'
     with open(out_tsv, 'w', encoding='utf-8') as fh:
-        # TODO: More to header
-        header = 'Orthogroup\tGeneID'
+        header = ['Orthogroup',
+                  'GeneID',
+                  'SeqLen',
+                  'NonSynSites',
+                  'SynSites',
+                  'NonSynSubs',
+                  'SynSubs',
+                  'pN',
+                  'pS',
+                  'dN',
+                  'dS',
+                  'dNdS']
+        header = '\t'.join(header)
         fh.write(f'{header}\n')
 
         # Loop over all orthogroups
@@ -183,7 +241,41 @@ def process_orthogroups(sco_list:dict, ingroup:str, alignments:str,
             # Skip sequences if they are too small
             if len(ingroup_seq) < min_aln_len:
                 continue
-            # TODO: Now calculate dN/dS
+            # Now calculate dN/dS
+            try:
+                dnds_out = calculate_dnds(ingroup_seq, outgroup_seq)
+            except Exception:
+                continue
+            # Save to output
+            # Writing this in long form for record keeping purposes
+            non_sites = dnds_out[0]
+            syn_sites = dnds_out[1]
+            non_subs  = dnds_out[2]
+            syn_subs  = dnds_out[3]
+            pN        = dnds_out[4]
+            pS        = dnds_out[5]
+            dN        = dnds_out[6]
+            dS        = dnds_out[7]
+            dnds_rat  = dnds_out[8]
+            row = [f'{sco_id}',
+                   f'{gene}',
+                   f'{len(ingroup_seq)}',
+                   f'{non_sites}',
+                   f'{syn_sites}',
+                   f'{non_subs}',
+                   f'{syn_subs}',
+                   f'{pN}',
+                   f'{pS}',
+                   f'{dN}',
+                   f'{dS}',
+                   f'{dnds_rat}']
+            row = '\t'.join(row)
+            fh.write(f'{row}\n')
+            n_processed += 1
+
+    # Report to log.
+    print(f'\nFound alignments for a total of {n_found:,} orthogroups.', flush=True)
+    print(f'    Calculated dN/dS for {n_processed} pairs of sequences.', flush=True)
 
 def main():
     '''
