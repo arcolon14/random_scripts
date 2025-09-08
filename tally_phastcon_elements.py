@@ -5,11 +5,8 @@ from datetime import datetime
 PROG = sys.argv[0].split('/')[-1]
 MIN_LEN = 10_000
 MIN_INTERVAL=1
-TARGET_FEATURES = ['CDS', 'intron', 
-                   'five_prime_UTR',
-                   'three_prime_UTR']
 DESC = """Determine the proportion of each of the annotated genetic \
-elements in a GFF across the sites present in an phastCons conserved \
+elements in a BED across the sites present in an phastCons conserved \
 sites BED file. Provide other general stats for the phastCons BED."""
 
 def parse_args():
@@ -19,7 +16,7 @@ def parse_args():
                    help='(str) Path to genome index in FAI format.')
     p.add_argument('-g', '--gff', required=True, 
                    help='(str) Path to the annotation in GFF format.')
-    p.add_argument('-b', '--bed', required=True,
+    p.add_argument('-p', '--phastcons', required=True,
                    help='(str) Path to the phastCons conserved sited BED.')
     p.add_argument('-o', '--out-dir', required=False, default='.',
                    help='(str) Path to output directory [default=.].')
@@ -27,7 +24,7 @@ def parse_args():
     args = p.parse_args()
     assert os.path.exists(args.fai)
     assert os.path.exists(args.gff)
-    assert os.path.exists(args.bed)
+    assert os.path.exists(args.phastcons)
     args.out_dir = args.out_dir.rstrip('/')
     return args
 
@@ -69,11 +66,12 @@ def load_fai(fai_f:int, min_len:int=MIN_LEN)->dict:
     print(f'    Retained {n_chrs:,} ({(n_chrs/records):0.2%}) records as chromosomes objects.', flush=True)
     return chromosomes
 
-def load_phastcons_bed(bed_f:str, chromosomes:dict, min_len:int=MIN_INTERVAL)->dict:
+def load_phastcons_bed(phastcons_bed_f:str, chromosomes:dict,
+                       min_len:int=MIN_INTERVAL)->dict:
     '''
     Load the conserved genomic intervals from a phastCons BED.
     Args:
-        bed_f: (str) Path to input phastCons BED.
+        phastcons_bed_f: (str) Path to input phastCons conserved BED.
         chromosomes: (dict) chromosome ids/length pairs.
         min_len: (int) Minimum length required to retain an interval.
     Returns:
@@ -85,7 +83,7 @@ def load_phastcons_bed(bed_f:str, chromosomes:dict, min_len:int=MIN_INTERVAL)->d
     print('\nLoading conserved genomic intervals from phastCons BED...')
     seen = 0
     kept = 0
-    with open(bed_f) as fh:
+    with open(phastcons_bed_f) as fh:
         for line in fh:
             line = line.strip('\n')
             if len(line)==0 or line.startswith('#'):
@@ -112,7 +110,7 @@ def load_phastcons_bed(bed_f:str, chromosomes:dict, min_len:int=MIN_INTERVAL)->d
     print(f'    Kept {kept:,} ({(kept/seen):0.2%}) records as genomic intervals.', flush=True)
     return phastcons
 
-def calculate_phastcons_stats(phastcons:dict, chromosomes:dict, outdir:int='.')->None:
+def calculate_phastcons_stats(phastcons:dict, chromosomes:dict, outdir:str='.')->None:
     '''
     Calculate the per-chromosome stats of the phastCons conserved sites.
     Args:
@@ -329,7 +327,7 @@ def set_feature_sites(chromosome:int, annotations:dict,
             feature_sites[feature].add(site)
     return feature_sites
 
-def calculate_gff_stats(annotations:dict, chromosomes:dict, outdir:int='.',
+def calculate_gff_stats(annotations:dict, chromosomes:dict, outdir:str='.',
                         target_features:list=TARGET_FEATURES)->None:
     '''
     Calculate the per-chromosome stats of the GFF annotations conserved sites.
@@ -435,7 +433,7 @@ def main():
     # First, load the genome lengths from the FAI
     chromosomes = load_fai(args.fai)
     # Load and tally the phastCons bed
-    phastcons = load_phastcons_bed(args.bed, chromosomes)
+    phastcons = load_phastcons_bed(args.phastcons, chromosomes)
     calculate_phastcons_stats(phastcons, chromosomes, args.out_dir)
     # Load the gff and get some stats
     annotations = load_gff(args.gff, chromosomes)
