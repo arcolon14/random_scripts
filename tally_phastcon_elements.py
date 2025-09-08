@@ -5,6 +5,7 @@ from datetime import datetime
 PROG = sys.argv[0].split('/')[-1]
 MIN_LEN = 10_000
 MIN_INTERVAL=1
+TARGET_FEATURES = [] # TODO: remove this.
 DESC = """Determine the proportion of each of the annotated genetic \
 elements in a BED across the sites present in an phastCons conserved \
 sites BED file. Provide other general stats for the phastCons BED."""
@@ -14,16 +15,17 @@ def parse_args():
     p = argparse.ArgumentParser(prog=PROG, description=DESC)
     p.add_argument('-f', '--fai', required=True, 
                    help='(str) Path to genome index in FAI format.')
-    p.add_argument('-g', '--gff', required=True, 
-                   help='(str) Path to the annotation in GFF format.')
+    p.add_argument('-a', '--annotation', required=True, 
+                   help='(str) Path to the annotation in BED format.')
     p.add_argument('-p', '--phastcons', required=True,
                    help='(str) Path to the phastCons conserved sited BED.')
     p.add_argument('-o', '--out-dir', required=False, default='.',
                    help='(str) Path to output directory [default=.].')
+    # TODO: Min len arg
     # Check inputs
     args = p.parse_args()
     assert os.path.exists(args.fai)
-    assert os.path.exists(args.gff)
+    assert os.path.exists(args.annotation)
     assert os.path.exists(args.phastcons)
     args.out_dir = args.out_dir.rstrip('/')
     return args
@@ -165,67 +167,65 @@ def calculate_phastcons_stats(phastcons:dict, chromosomes:dict, outdir:str='.')-
             fh.write(f'{row}\n')
 
 class Annotation:
-    '''Store the annotation intervals from a GFF.'''
-    def __init__(self, chrom:str, feature:str, start:int, end:int, strand:str):
+    '''Store the annotation intervals from a BED.'''
+    def __init__(self, chrom:str, feature:str, start:int, end:int):
         self.chr = chrom
         self.fet = feature
         self.sta = start
         self.end = end
-        self.std = strand
     def __str__(self):
-        return f'{self.chr}\t{self.fet}\t{self.sta}\t{self.end}\t{self.std}'
+        return f'{self.chr}\t{self.fet}\t{self.sta}\t{self.end}'
 
-def load_gff(gff_f:str, chromosomes:dict,
-             target_features:list=TARGET_FEATURES)->dict:
+def load_annotation_bed(annotation_bed_f:str, 
+                        chromosomes:dict)->dict:
     '''
     Parse a GFF file and load the annotated features.
     Args:
-        gff_f: (str) Path to input GFF.
+        annotation_bed_f: (str) Path to input annotation BED.
         chromosomes: (dict) chromosome ids/length pairs.
-        target_features: (list) list of features to retain from the GFF.
     Returns:
         annotations: (dict) per-chromosome Annotation objects
             { chr_id : [ Annotation_1, Annotation_2, ..., Annotation_n ], ... }
     '''
-    print('\nLoading the annotatated features from the input GFF...', flush=True)
-    # Specify which features to keep, i.e., we are not keeping genes,
-    # since we care about the indivudual elements (e.g., introns, exons,
-    # UTRs).
-    print('    Keeping the following target features:')
-    for feature in sorted(target_features):
-        print(f'        * {feature}', flush=True)
+    print('\nLoading the annotatated features from the input BED...', flush=True)
     annotations = dict()
+    feat_tally = dict()
     seen = 0
     kept = 0
     # Parse the file
-    with open(gff_f) as fh:
+    with open(annotation_bed_f) as fh:
         for line in fh:
             line = line.strip('\n')
             if len(line)==0 or line.startswith('#'):
                 continue
             seen += 1
             fields = line.split('\t')
-            assert len(fields) == 9
+            # The input BED needs to have 4 fields
+            assert len(fields) == 4, 'Input BED must have four columns: Chr<tab>Start<tab>End<tab>Feature/Annotation'
             chrom = fields[0]
             # Only process elements in the target chromosome
             if chrom not in chromosomes:
                 continue
-            # Skip the non-target features
-            feature = fields[2]
-            if feature not in target_features:
-                continue
-            start  = int(fields[3]) # GFFs are 1-base inclusive
-            end    = int(fields[4]) # GFFs are 1-base inclusive
-            strand = fields[6]
+            # Set the coordinates
+            start  = int(fields[1]) # BED start are 0-based inclusive
+            end    = int(fields[2]) # BED end are 0-based exclusive
+            # Keep a track of the different features/annotations
+            feature = fields[3]
+            feat_tally.setdefault(feature, 0)
+            feat_tally[feature] += 1
             # Create the Annotation object from the parsed elements
-            annotation = Annotation(chrom, feature, start, end, strand)
+            annotation = Annotation(chrom, feature, start, end)
             # Add the annotation feature to the output dict
             annotations.setdefault(chrom, [])
             annotations[chrom].append(annotation)
             kept += 1
     # report to log
-    print(f'\n    Read {seen:,} records from the input GFF.', flush=True)
-    print(f'    Kept {kept:,} ({(kept/seen):0.2%}) records as annotations from the specified features.', flush=True)
+    print(f'    Read {seen:,} records from the input GFF.', flush=True)
+    print(f'    Kept {kept:,} ({(kept/seen):0.2%}) records as annotations from the following features:', flush=True)
+    for feat in sorted(feat_tally):
+        n = feat_tally[feat]
+        print(f'        {feat} : {n:,}',
+              flush=True)
     return annotations
 
 def tally_phastcons_annotations(phastcons:dict, annotations:dict,
@@ -239,7 +239,6 @@ def tally_phastcons_annotations(phastcons:dict, annotations:dict,
         annotations: (dict) per-chromosome Annotation objects
         chromosomes: (dict) chromosome ids/length pairs.
         outdir: (str) Path to output directory [default='.']
-        target_features: (list) list of features to retain from the GFF.
     Returns:
         None
     '''
@@ -327,20 +326,19 @@ def set_feature_sites(chromosome:int, annotations:dict,
             feature_sites[feature].add(site)
     return feature_sites
 
-def calculate_gff_stats(annotations:dict, chromosomes:dict, outdir:str='.',
-                        target_features:list=TARGET_FEATURES)->None:
+def calculate_annotation_stats(annotations:dict, chromosomes:dict,
+                               outdir:str='.')->None:
     '''
-    Calculate the per-chromosome stats of the GFF annotations conserved sites.
+    Calculate the per-chromosome stats of the annotations BED.
     Args:
         annotations: (dict) per-chromosome Annotation objects
         chromosomes: (dict) chromosome ids/length pairs.
         outdir: (str) Path to output directory [default='.']
-        target_features: (list) list of features to retain from the GFF.
     Returns:
         None
     '''
-    out_f = f'{outdir}/gff_stats.tsv'
-    print(f'\nCalculating stats for GFF annotation and saving to file:\n    {out_f}', flush=True)
+    out_f = f'{outdir}/annotation_stats.tsv'
+    print(f'\nCalculating stats for the annotation and saving to file:\n    {out_f}', flush=True)
     with open(out_f, 'w') as fh:
         header = ['chromID', 'chromLen', 'featType', 'featNum', 
                   'featLen', 'featProp', 'meanLen', 'medianLen',
@@ -355,15 +353,15 @@ def calculate_gff_stats(annotations:dict, chromosomes:dict, outdir:str='.',
             chr_annotations = annotations.get(chromosome, [])
             # This will be the output for that chromosome
             feature_tally = dict()
-            for feature in target_features:
-                feature_tally.setdefault(feature, [])
             # Loop over the annotations in the chromosome
             for annotation in chr_annotations:
                 assert isinstance(annotation, Annotation)
                 feat  = annotation.fet
-                start = annotation.sta-1 # Since BEDs are 0-based, but GFFs are 1-based
+                start = annotation.sta
                 end   = annotation.end
                 span  = end-start
+                # Add to the tally dict
+                feature_tally.setdefault(feat, [])
                 feature_tally[feat].append(span)
                 other -= span
             # Prepare the output for each tallied feature
@@ -382,7 +380,6 @@ def calculate_gff_stats(annotations:dict, chromosomes:dict, outdir:str='.',
                 if feat_n>0:
                     mean_l   = statistics.mean(size_dist)
                     median_l = statistics.median(size_dist)
-                    # sd_l     = statistics.stdev(size_dist)
                     min_l    = min(size_dist)
                     max_l    = max(size_dist)
                 if feat_n>1:
@@ -435,11 +432,11 @@ def main():
     # Load and tally the phastCons bed
     phastcons = load_phastcons_bed(args.phastcons, chromosomes)
     calculate_phastcons_stats(phastcons, chromosomes, args.out_dir)
-    # Load the gff and get some stats
-    annotations = load_gff(args.gff, chromosomes)
-    calculate_gff_stats(annotations, chromosomes, args.out_dir)
+    # Load the annotation BED and get some stats
+    annotations = load_annotation_bed(args.annotation, chromosomes)
+    calculate_annotation_stats(annotations, chromosomes, args.out_dir)
     # Calculate overlaps between phastCons and GFF
-    tally_phastcons_annotations(phastcons, annotations, chromosomes, args.out_dir)
+    # tally_phastcons_annotations(phastcons, annotations, chromosomes, args.out_dir)
 
     print(f'\n{PROG} finished on {date()} {time()}.')
 
