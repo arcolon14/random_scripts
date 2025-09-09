@@ -146,8 +146,6 @@ def calculate_phastcons_stats(phastcons:dict, chromosomes:dict, outdir:str='.')-
     Returns:
         None
     '''
-    # TODO: Add a category for the whole genome, aggregating the data
-    # for all the individual sequences.
     out_f = f'{outdir}/phastCons_stats.tsv'
     print(f'\nCalculating stats for phastCons elements and saving to file:\n\
     {out_f}', flush=True)
@@ -156,11 +154,16 @@ def calculate_phastcons_stats(phastcons:dict, chromosomes:dict, outdir:str='.')-
                   'phastConsProp', 'meanLen', 'medianLen','sdLen', 'minLen', 'maxLen']
         header = '\t'.join(header)
         fh.write(f'{header}\n')
+        # Create an entry for the genome-wide statistics
+        gw_stats = []
+        gw_len = 0
         # Loop over the chromosomes and calculate per-chrom stats
-        for chromosome in chromosomes:
-            chr_len = chromosomes[chromosome]
+        for chromosome, chr_len in chromosomes.items():
             chr_phastcons = phastcons.get(chromosome, [])
             size_dist = [ phastcon[1]-phastcon[0] for phastcon in chr_phastcons ]
+            # Add to the genome-wide stats
+            gw_stats += size_dist
+            gw_len += chr_len
             # Calculate stats from the size distribution
             phasc_n  = len(size_dist)
             total_l  = sum(size_dist)
@@ -192,6 +195,37 @@ def calculate_phastcons_stats(phastcons:dict, chromosomes:dict, outdir:str='.')-
                    f'{max_l}' ]             # maxLen
             row = '\t'.join(row)
             fh.write(f'{row}\n')
+        # Print the genome-wide statistics
+        phasc_n  = len(gw_stats)
+        total_l  = sum(gw_stats)
+        perc_l   = total_l/gw_len
+        # Initialize these to 0 to prevent stat errors
+        mean_l   = 0
+        median_l = 0
+        sd_l     = 0
+        min_l    = 0
+        max_l    = 0
+        # Now, if values are present calculate stats
+        if phasc_n>0:
+            mean_l   = statistics.mean(gw_stats)
+            median_l = statistics.median(gw_stats)
+            min_l    = min(gw_stats)
+            max_l    = max(gw_stats)
+        if phasc_n>1:
+            sd_l     = statistics.stdev(gw_stats)
+        # Save to output file
+        row = ['AllGW',                # chromID
+              f'{gw_len}',             # chromLen
+              f'{phasc_n}',            # numPhastCons
+              f'{total_l}',            # totalLen
+              f'{perc_l:0.6f}',        # totalProp
+              f'{mean_l:0.3f}',        # meanLen
+              f'{median_l:0.3g}',      # medianLen
+              f'{sd_l:0.3f}',          # sdLen
+              f'{min_l}',              # minLen
+              f'{max_l}' ]             # maxLen
+        row = '\t'.join(row)
+        fh.write(f'{row}\n')
 
 class Annotation:
     '''Store the annotation intervals from a BED.'''
@@ -460,8 +494,6 @@ def calculate_annotation_stats(annotations:dict, chromosomes:dict,
     Returns:
         None
     '''
-    # TODO: Add a category for the whole genome, aggregating the data
-    # for all the individual sequences.
     out_f = f'{outdir}/annotation_stats.tsv'
     print(f'\nCalculating stats for the annotation and saving to file:\n    {out_f}', flush=True)
     with open(out_f, 'w', encoding='utf-8') as fh:
@@ -470,9 +502,13 @@ def calculate_annotation_stats(annotations:dict, chromosomes:dict,
                   'sdLen', 'minLen', 'maxLen']
         header = '\t'.join(header)
         fh.write(f'{header}\n')
+        # Create an entry for the genome-wide statistics
+        gw_stats = {}
+        gw_len = 0
         # Loop over the chromosomes and calculate per-chrom stats
         for chromosome, chr_len in chromosomes.items():
             chr_annotations = annotations.get(chromosome, [])
+            gw_len += chr_len
             # This will be the output for that chromosome
             feature_tally = {}
             # Loop over the annotations in the chromosome
@@ -485,8 +521,12 @@ def calculate_annotation_stats(annotations:dict, chromosomes:dict,
                 # Add to the tally dict
                 feature_tally.setdefault(feat, [])
                 feature_tally[feat].append(span)
+                # Add to the genome-wide stats dict
+                gw_stats.setdefault(feat, [])
+                gw_stats[feat].append(span)
             # Prepare the output for each tallied feature
-            for feature, size_dist in feature_tally.items():
+            for feature in sorted(feature_tally):
+                size_dist = feature_tally[feature]
                 feat_n  = len(size_dist)
                 total_l = sum(size_dist)
                 prop_l  = total_l/chr_len
@@ -519,6 +559,41 @@ def calculate_annotation_stats(annotations:dict, chromosomes:dict,
                     f'{max_l}' ]             # maxLen
                 row = '\t'.join(row)
                 fh.write(f'{row}\n')
+        # Prepare the output for the genome-wide stats
+        for feature in sorted(gw_stats):
+            size_dist = gw_stats[feature]
+            feat_n  = len(size_dist)
+            total_l = sum(size_dist)
+            prop_l  = total_l/gw_len
+            # Initialize these to 0 to prevent stat errors
+            mean_l   = 0
+            median_l = 0
+            sd_l     = 0
+            min_l    = 0
+            max_l    = 0
+            # Now, if values are present calculate stats
+            if feat_n>0:
+                mean_l   = statistics.mean(size_dist)
+                median_l = statistics.median(size_dist)
+                min_l    = min(size_dist)
+                max_l    = max(size_dist)
+            if feat_n>1:
+                sd_l     = statistics.stdev(size_dist)
+            # Save to output file
+            row = [
+                'AllGW',                 # chromID
+                f'{gw_len}',             # chromLen
+                feature,                 # featType
+                f'{feat_n}',             # featNum
+                f'{total_l}',            # featLen
+                f'{prop_l:0.8f}',        # featProp
+                f'{mean_l:0.3f}',        # meanLen
+                f'{median_l:0.3g}',      # medianLen
+                f'{sd_l:0.3f}',          # sdLen
+                f'{min_l}',              # minLen
+                f'{max_l}' ]             # maxLen
+            row = '\t'.join(row)
+            fh.write(f'{row}\n')
 
 def main():
     '''Main function: rode the code!'''
