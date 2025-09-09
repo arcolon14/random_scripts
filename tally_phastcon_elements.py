@@ -447,9 +447,7 @@ def find_overlapping_annotations(annotations:dict,
                 annotations_no_olap.setdefault(chromosome, [])
                 annotations_no_olap[chromosome].append(new_annotation)
                 fh.write(f'{new_annotation.chr}\t{new_annotation.sta}\t{new_annotation.end}\t{new_annotation.fet}\n')
-
     return annotations_no_olap
-
 
 def calculate_annotation_stats(annotations:dict, chromosomes:dict,
                                outdir:str='.')->None:
@@ -462,8 +460,6 @@ def calculate_annotation_stats(annotations:dict, chromosomes:dict,
     Returns:
         None
     '''
-    # TODO: Remove the default processing of 'other', since it is
-    # now done in a previous step.
     # TODO: Add a category for the whole genome, aggregating the data
     # for all the individual sequences.
     out_f = f'{outdir}/annotation_stats.tsv'
@@ -476,11 +472,9 @@ def calculate_annotation_stats(annotations:dict, chromosomes:dict,
         fh.write(f'{header}\n')
         # Loop over the chromosomes and calculate per-chrom stats
         for chromosome, chr_len in chromosomes.items():
-            # Set an "other" categery for non-annotated regions
-            other = chr_len
             chr_annotations = annotations.get(chromosome, [])
             # This will be the output for that chromosome
-            feature_tally = dict()
+            feature_tally = {}
             # Loop over the annotations in the chromosome
             for annotation in chr_annotations:
                 assert isinstance(annotation, Annotation)
@@ -491,7 +485,6 @@ def calculate_annotation_stats(annotations:dict, chromosomes:dict,
                 # Add to the tally dict
                 feature_tally.setdefault(feat, [])
                 feature_tally[feat].append(span)
-                other -= span
             # Prepare the output for each tallied feature
             for feature, size_dist in feature_tally.items():
                 feat_n  = len(size_dist)
@@ -526,30 +519,6 @@ def calculate_annotation_stats(annotations:dict, chromosomes:dict,
                     f'{max_l}' ]             # maxLen
                 row = '\t'.join(row)
                 fh.write(f'{row}\n')
-            # Prepare output for other class
-            feature  = 'other'
-            total_l  = other
-            prop_l   = total_l/chr_len
-            feat_n   = -1
-            mean_l   = -1
-            median_l = -1
-            sd_l     = -1
-            min_l    = -1
-            max_l    = -1
-            row = [
-                chromosome,              # chromID
-                f'{chr_len}',            # chromLen
-                feature,                 # featType
-                f'{feat_n}',             # featNum
-                f'{total_l}',            # featLen
-                f'{prop_l:0.8f}',        # featProp
-                f'{mean_l:0.3f}',        # meanLen
-                f'{median_l:0.3g}',      # medianLen
-                f'{sd_l:0.3f}',          # sdLen
-                f'{min_l}',              # minLen
-                f'{max_l}' ]             # maxLen
-            row = '\t'.join(row)
-            fh.write(f'{row}\n')
 
 def main():
     '''Main function: rode the code!'''
