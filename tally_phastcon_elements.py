@@ -15,9 +15,9 @@ sites BED file. Provide other general stats for the phastCons BED."""
 def parse_args():
     '''Set and verify command line options.'''
     p = argparse.ArgumentParser(prog=PROG, description=DESC)
-    p.add_argument('-f', '--fai', required=True, 
+    p.add_argument('-f', '--fai', required=True,
                    help='(str) Path to genome index in FAI format.')
-    p.add_argument('-a', '--annotation', required=True, 
+    p.add_argument('-a', '--annotation', required=True,
                    help='(str) Path to the annotation in BED format.')
     p.add_argument('-p', '--phastcons', required=True,
                    help='(str) Path to the phastCons conserved sited BED.')
@@ -57,8 +57,9 @@ def load_fai(fai_f:int, min_len:int=MIN_LEN)->dict:
     Returns:
         chromosomes: (dict) chromosome ids/length pairs.
     '''
-    print(f'\nLoading chromosomes from FAI (retaining sequences larger than {min_len:,} bp).',
-          flush=True)
+    print(f'''
+Loading chromosomes from FAI (retaining sequences larger than \
+{min_len:,} bp).''', flush=True)
     chromosomes = {}
     records = 0
     total_seq = 0
@@ -86,13 +87,14 @@ def load_fai(fai_f:int, min_len:int=MIN_LEN)->dict:
     return chromosomes
 
 def load_phastcons_bed(phastcons_bed_f:str, chromosomes:dict,
-                       min_len:int=MIN_INTERVAL)->dict:
+                       min_interval:int=MIN_INTERVAL)->dict:
     '''
     Load the conserved genomic intervals from a phastCons BED.
     Args:
         phastcons_bed_f: (str) Path to input phastCons conserved BED.
         chromosomes: (dict) chromosome ids/length pairs.
-        min_len: (int) Minimum length required to retain an interval.
+        min_interval: (int) Minimum length required to retain an interval
+                     [default=1].
     Returns:
         phastcons: (dict) Dictionary of per-chromosome conserved intervals.
             { chrom_1_id : [ (start_1, end_1), (start_2, end_2), 
@@ -115,7 +117,7 @@ def load_phastcons_bed(phastcons_bed_f:str, chromosomes:dict,
             # Check the formatting of the BED
             assert end>start
             # Skip small elements
-            if (end-start) < min_len:
+            if (end-start) < min_interval:
                 continue
             # Only process elements in the target chromosome
             if chrom not in chromosomes:
@@ -131,8 +133,10 @@ def load_phastcons_bed(phastcons_bed_f:str, chromosomes:dict,
             phastcons[chrom].append((start, end))
             kept += 1
     # report to log
-    print(f'    Read {seen:,} records from the input BED.', flush=True)
-    print(f'    Kept {kept:,} ({(kept/seen):0.2%}) records as genomic intervals.', flush=True)
+    print(f'''    Read {seen:,} records from the input BED.
+    Filtering phastCons intervals smaller than {min_interval:,} bp.
+    Kept {kept:,} ({(kept/seen):0.2%}) records as genomic intervals.''',
+        flush=True)
     return phastcons
 
 def calculate_phastcons_stats(phastcons:dict, chromosomes:dict, outdir:str='.')->None:
@@ -146,8 +150,9 @@ def calculate_phastcons_stats(phastcons:dict, chromosomes:dict, outdir:str='.')-
         None
     '''
     out_f = f'{outdir}/phastCons_stats.tsv'
-    print(f'\nCalculating stats for phastCons elements and saving to file:\n\
-    {out_f}', flush=True)
+    print(f'''
+Calculating stats for phastCons elements. Saving to file:
+    {out_f}''', flush=True)
     with open(out_f, 'w', encoding='utf-8') as fh:
         header = ['chromID', 'chromLen', 'phastConsNum', 'phastConsLen',
                   'phastConsProp', 'meanLen', 'medianLen','sdLen', 'minLen', 'maxLen']
@@ -236,13 +241,15 @@ class Annotation:
     def __str__(self):
         return f'{self.chr}\t{self.fet}\t{self.sta}\t{self.end}'
 
-def load_annotation_bed(annotation_bed_f:str, 
-                        chromosomes:dict)->dict:
+def load_annotation_bed(annotation_bed_f:str,
+                        chromosomes:dict,
+                        min_interval:int=MIN_INTERVAL)->dict:
     '''
     Parse a GFF file and load the annotated features.
     Args:
         annotation_bed_f: (str) Path to input annotation BED.
         chromosomes: (dict) chromosome ids/length pairs.
+        min_interval: (int) minumum length of annotation intervals [default=1]
     Returns:
         annotations: (dict) per-chromosome Annotation objects
             { chr_id : [ Annotation_1, Annotation_2, ..., Annotation_n ], ... }
@@ -276,6 +283,9 @@ def load_annotation_bed(annotation_bed_f:str,
             if end>chromosomes[chrom]:
                 sys.exit(f'Error: end coordinate must be smaller than chromosome\
                          length ({chromosomes[chrom]}), Line: {line}')
+            # Check for the length requirements
+            if (end-start) < min_interval:
+                continue
             # Keep a track of the different features/annotations
             feature = fields[3]
             feat_tally.setdefault(feature, 0)
@@ -287,9 +297,10 @@ def load_annotation_bed(annotation_bed_f:str,
             annotations[chrom].append(annotation)
             kept += 1
     # report to log
-    print(f'    Read {seen:,} records from the input GFF.', flush=True)
-    print(f'    Kept {kept:,} ({(kept/seen):0.2%}) records as annotations from the following features:',\
-          flush=True)
+    print(f'''    Read {seen:,} records from the input annotation BED.
+    Filtering annotations smaller than {min_interval:,} bp.
+    Kept {kept:,} ({(kept/seen):0.2%}) records as annotations from the \
+following features:''')
     for feat in sorted(feat_tally):
         n = feat_tally[feat]
         print(f'        {feat} : {n:,}',
@@ -310,8 +321,10 @@ def tally_phastcons_annotations(phastcons:dict, annotations:dict,
         None
     '''
     out_f = f'{outdir}/phastCons_annotations.tsv'
-    print(f'\nCalculating the overlap between the phastcons and annotation elements and saving to file:\n\
-    {out_f}', flush=True)
+    print(F'''
+Calculating the overlap between the phastcons and annotation elements. \
+Saving to file:
+    {out_f}''', flush=True)
     with open(out_f, 'w', encoding='utf-8') as fh:
         header = ['chromID', 'phastConsLen', 'featType',
                   'featLen', 'featProp']
@@ -426,8 +439,9 @@ def find_overlapping_annotations(annotations:dict,
             overlapping annotations.
     '''
     out_bed = f'{outdir}/annotations_no_overlap.bed'
-    print(f'\nProcessing annotations to identify and collapse overlapping sites. Saving to:\n\
-    {out_bed}', flush=True)
+    print(f'''
+Processing annotations to identify and collapse overlapping sites. Saving to file:
+    {out_bed}''', flush=True)
     annotations_no_olap = {}
 
     # TODO: This merges adjacent (but non-overlapping) windows
@@ -512,9 +526,11 @@ def calculate_annotation_stats(annotations:dict, chromosomes:dict,
         None
     '''
     out_f = f'{outdir}/annotation_stats.tsv'
-    print(f'\nCalculating stats for the annotation and saving to file:\n    {out_f}', flush=True)
+    print(f'''
+Calculating stats for the annotation. Saving to file:
+    {out_f}''', flush=True)
     with open(out_f, 'w', encoding='utf-8') as fh:
-        header = ['chromID', 'chromLen', 'featType', 'featNum', 
+        header = ['chromID', 'chromLen', 'featType', 'featNum',
                   'featLen', 'featProp', 'meanLen', 'medianLen',
                   'sdLen', 'minLen', 'maxLen']
         header = '\t'.join(header)
@@ -619,20 +635,29 @@ def main():
     # First, load the genome lengths from the FAI
     chromosomes = load_fai(args.fai, args.min_seq_len)
     # Load and tally the phastCons bed
-    phastcons = load_phastcons_bed(args.phastcons, chromosomes)
-    calculate_phastcons_stats(phastcons, chromosomes, args.out_dir)
+    phastcons = load_phastcons_bed(args.phastcons,
+                                   chromosomes,
+                                   args.min_interval_len)
+    calculate_phastcons_stats(phastcons,
+                              chromosomes,
+                              args.out_dir)
 
     # Load the annotation BED
-    annotations = load_annotation_bed(args.annotation, chromosomes)
+    annotations = load_annotation_bed(args.annotation,
+                                      chromosomes,
+                                      args.min_interval_len)
     # Process to find any overlapping windows.
     annotations = find_overlapping_annotations(annotations,
                                                chromosomes,
                                                args.out_dir)
     # Get some stats on this new file.
-    calculate_annotation_stats(annotations, chromosomes, args.out_dir)
+    calculate_annotation_stats(annotations,
+                               chromosomes,
+                               args.out_dir)
 
     # Calculate overlaps between phastCons and GFF
-    tally_phastcons_annotations(phastcons, annotations, chromosomes, args.out_dir)
+    tally_phastcons_annotations(phastcons, annotations,
+                                chromosomes, args.out_dir)
 
     print(f'\n{PROG} finished on {date()} {time()}.')
 
