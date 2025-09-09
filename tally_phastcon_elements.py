@@ -103,6 +103,11 @@ def load_phastcons_bed(phastcons_bed_f:str, chromosomes:dict,
             # Only process elements in the target chromosome
             if chrom not in chromosomes:
                 continue
+            # Check the coordinates
+            if start<0:
+                sys.exit(f'Error: start coordinate must be > 0, Line: {line}')
+            if end>chromosomes[chrom]:
+                sys.exit(f'Error: end coordinate must be smaller than chromosome length ({chromosomes[chrom]}), Line: {line}')
             # Add to the intervals to the output dictionary
             phastcons.setdefault(chrom, [])
             phastcons[chrom].append((start, end))
@@ -209,6 +214,12 @@ def load_annotation_bed(annotation_bed_f:str,
             # Set the coordinates
             start  = int(fields[1]) # BED start are 0-based inclusive
             end    = int(fields[2]) # BED end are 0-based exclusive
+            # Check the coordinates
+            if start<0:
+                sys.exit(f'Error: start coordinate must be > 0, Line: {line}')
+            if end>chromosomes[chrom]:
+                sys.exit(f'Error: end coordinate must be smaller than chromosome length ({chromosomes[chrom]}), Line: {line}')
+            assert start >=0, f'Error: starting coordinate must be '
             # Keep a track of the different features/annotations
             feature = fields[3]
             feat_tally.setdefault(feature, 0)
@@ -318,13 +329,103 @@ def set_feature_sites(chromosome:int, annotations:dict,
     for annotation in chr_annotations:
         assert isinstance(annotation, Annotation)
         feature = annotation.fet
-        start = annotation.sta-1 # Since BEDs are 0-based, but GFFs are 1-based
+        start = annotation.sta
         end = annotation.end
         # Loop over each site in the annotation and add to 
         # the corresponding set
         for site in range(start, end):
             feature_sites[feature].add(site)
     return feature_sites
+
+def find_overlapping_annotations(annotations:dict,
+                                 chromosomes:dict,
+                                 outdir:str='.')->dict:
+    '''
+    Identify and tag overlapping annotation windows.
+    Args:
+        annotations: (dict) per-chromosome Annotation objects
+        chromosomes: (dict) chromosome ids/length pairs.
+        outdir (str): Path to output directory
+    Returns:
+        annotations_no_olap: (dict) per-chromosome annotation
+            containing the new "multiple" feature for
+            overlapping annotations.
+    '''
+    out_bed = f'{outdir}/annotations_no_overlap.bed'
+    print(f'\nProcessing annotations to identify and collapse overlapping sites. Saving to:\n    {out_bed}')
+    annotations_no_olap = dict()
+
+    # TODO: This merges adjacent (but non-overlapping) windows
+    # with the same annotation. This doesn't matter for the final
+    # result; however it would be good if this did not happen to
+    # avoid skewing the length statistics later on. These should be
+    # taken from the BED or GFF anyway, but making sure.
+
+    with open(out_bed, 'w') as fh:
+
+        # Loop over chromosome and process
+        for chromosome in chromosomes:
+            chr_len = chromosomes[chromosome]
+            chr_annotations = annotations[chromosome]
+
+            # Initialize the spans of the whole chromosome.
+            # By default these will be annotated to "other"
+            # and filled as annotations are read
+            per_site_feats = { s : 'other' for s in range(chr_len) }
+
+            # Loop over the annotations in the chromosome
+            for annotation in chr_annotations:
+                assert isinstance(annotation, Annotation)
+                feature = annotation.fet
+                start = annotation.sta
+                end = annotation.end
+                # Loop over the range of the annotation
+                for s in range(start, end):
+                    # "other" is the initialized state.
+                    # If a feature has been added to this site already
+                    if per_site_feats[s] != 'other':
+                        # And if its not the same as the current feature,
+                        # this means this site has multiple annotations,
+                        # e.g., an intron+transposable element
+                        if per_site_feats[s] != feature:
+                            per_site_feats[s] = 'multiple'
+                        # Otherwise, keep the current feature
+                        else:
+                            per_site_feats[s] = feature
+                    # No feature has been added to the site, so just update
+                    else:
+                        per_site_feats[s] = feature
+
+            # With info on all sites, collapse them down to new Annotation
+            # objects by finding consecutive sites annotated with the same feature.
+            curr_start = 0
+            curr_feature = None
+
+            for site in sorted(per_site_feats.keys()):
+                site_feature = per_site_feats[site]
+
+                # If this is the first position or we have a new feature
+                if curr_feature is None or site_feature != curr_feature:
+                    # If we had a previous interval, save it
+                    if curr_feature is not None:
+                        new_annotation = Annotation(chromosome, curr_feature, 
+                                                        curr_start, site)
+                        annotations_no_olap.setdefault(chromosome, [])
+                        annotations_no_olap[chromosome].append(new_annotation)
+                        fh.write(f'{new_annotation.chr}\t{new_annotation.sta}\t{new_annotation.end}\t{new_annotation.fet}\n')
+                    # Start a new interval
+                    curr_start = site
+                    curr_feature = site_feature
+            # Don't forget the last interval
+            if curr_feature is not None:
+                new_annotation = Annotation(chromosome, curr_feature, 
+                                                curr_start, chr_len)
+                annotations_no_olap.setdefault(chromosome, [])
+                annotations_no_olap[chromosome].append(new_annotation)
+                fh.write(f'{new_annotation.chr}\t{new_annotation.sta}\t{new_annotation.end}\t{new_annotation.fet}\n')
+
+    return annotations_no_olap
+
 
 def calculate_annotation_stats(annotations:dict, chromosomes:dict,
                                outdir:str='.')->None:
@@ -432,9 +533,16 @@ def main():
     # Load and tally the phastCons bed
     phastcons = load_phastcons_bed(args.phastcons, chromosomes)
     calculate_phastcons_stats(phastcons, chromosomes, args.out_dir)
-    # Load the annotation BED and get some stats
+
+    # Load the annotation BED
     annotations = load_annotation_bed(args.annotation, chromosomes)
+    # Process to find any overlapping windows.
+    annotations = find_overlapping_annotations(annotations,
+                                               chromosomes,
+                                               args.out_dir)
+    # Get some stats on this new file.
     calculate_annotation_stats(annotations, chromosomes, args.out_dir)
+
     # Calculate overlaps between phastCons and GFF
     # tally_phastcons_annotations(phastcons, annotations, chromosomes, args.out_dir)
 
