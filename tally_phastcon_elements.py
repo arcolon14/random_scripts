@@ -8,7 +8,6 @@ from datetime import datetime
 PROG = sys.argv[0].split('/')[-1]
 MIN_LEN = 10_000
 MIN_INTERVAL=1
-TARGET_FEATURES = [] # TODO: remove this.
 DESC = """Determine the proportion of each of the annotated genetic \
 elements in a BED across the sites present in an phastCons conserved \
 sites BED file. Provide other general stats for the phastCons BED."""
@@ -298,8 +297,7 @@ def load_annotation_bed(annotation_bed_f:str,
     return annotations
 
 def tally_phastcons_annotations(phastcons:dict, annotations:dict,
-                                chromosomes:dict, outdir:str='.',
-                                target_features=TARGET_FEATURES)->None:
+                                chromosomes:dict, outdir:str='.')->None:
     '''
     Calculate the overlap between the phastcons and annotation elements
     and tally across different annotation elements.
@@ -319,63 +317,82 @@ def tally_phastcons_annotations(phastcons:dict, annotations:dict,
                   'featLen', 'featProp']
         header = '\t'.join(header)
         fh.write(f'{header}\n')
+        # Add genome-wide stats
+        gw_phastcon_len = 0
+        gw_results = {}
         # Loop and process the chromosomes
         for chromosome in chromosomes:
             # First, generate a object to hold the results for that chrom
-            results = dict()
+            chr_results = {}
             # Get the annotations for that chromosome
+            target_features = { annotation.fet for
+                               annotation in annotations[chromosome] }
             feature_sites = set_feature_sites(chromosome, annotations,
-                                              target_features)
+                                              list(target_features))
             # Process the phastCons for the target chromosome
             chr_phastcons = phastcons.get(chromosome, None)
             if chr_phastcons is None:
                 continue
-            total_phastcon_len = 0
+            chr_phastcon_len = 0
             # Then, iterare over the phastCon intervals
             for interval in chr_phastcons:
                 phastcon_set = set(range(interval[0], interval[1]))
-                total_phastcon_len += len(phastcon_set)
+                chr_phastcon_len += len(phastcon_set)
+                gw_phastcon_len += len(phastcon_set)
                 # Compare that phastCon set against the different feature
                 # sites. The intersection between the two set is the
                 # overlap between the genomic interval of the two
                 # elements. As you do, keep a tally in the results object.
                 for feature, feat_s in feature_sites.items():
                     overlap = len(phastcon_set.intersection(feat_s))
-                    results.setdefault(feature, 0)
-                    results[feature] += overlap
-            # Determine the "other" category (non-target features)
-            other = total_phastcon_len
-            for feature in results:
-                other -= results[feature]
-            results['other'] = other
-            # Prepare the output
-            for feature, span in results.items():
+                    # Add to the chrom-specific results
+                    chr_results.setdefault(feature, 0)
+                    chr_results[feature] += overlap
+                    # Add to the genome-wide results
+                    gw_results.setdefault(feature, 0)
+                    gw_results[feature] += overlap
+            # Prepare the output for the chromosomes
+            for feature in sorted(chr_results):
+                span = chr_results[feature]
                 prop = 0.0
-                if total_phastcon_len>0:
-                    prop = span/total_phastcon_len
+                if chr_phastcon_len>0:
+                    prop = span/chr_phastcon_len
                 row = [chromosome,               # chromID
-                       f'{total_phastcon_len}',  # phastConsLen
+                       f'{chr_phastcon_len}',    # phastConsLen
                        feature,                  # featType
                        f'{span}',                # featLen
                        f'{prop:0.8f}' ]          # featProp
                 row = '\t'.join(row)
                 fh.write(f'{row}\n')
+        # Prepare the output for the whole gehome
+        for feature in sorted(gw_results):
+            span = gw_results[feature]
+            prop = 0.0
+            if gw_phastcon_len>0:
+                prop = span/gw_phastcon_len
+            row = ['AllGW',                  # chromID
+                  f'{gw_phastcon_len}',      # phastConsLen
+                  feature,                   # featType
+                  f'{span}',                 # featLen
+                  f'{prop:0.8f}' ]           # featProp
+            row = '\t'.join(row)
+            fh.write(f'{row}\n')
 
 def set_feature_sites(chromosome:int, annotations:dict,
-                         target_features:list=TARGET_FEATURES)->dict:
+                         target_features:list)->dict:
     '''
     Process the annotations for a target chromsome, generating a set
     of site per annotation feature.
     Args:
         chromosome: (int) Target chromosome to process
         annotations: (dict) per-chromosome Annotation objects
-        target_features: (list) list of features to retain from the GFF.
+        target_features: (list) Features to be analyzed.
     Returns:
         feature_sites: (dict) feature feature sites (positions)
-            { feature_1 : [ site1, site2, ..., siten ], ... }
+            { feature_1 : { site1, site2, ..., siteN }, ... }
     '''
     # Initialize outputs
-    feature_sites = dict()
+    feature_sites = {}
     for feature in target_features:
         feature_sites.setdefault(feature, set())
     # Get the annotations for the target chromosome
@@ -615,7 +632,7 @@ def main():
     calculate_annotation_stats(annotations, chromosomes, args.out_dir)
 
     # Calculate overlaps between phastCons and GFF
-    # tally_phastcons_annotations(phastcons, annotations, chromosomes, args.out_dir)
+    tally_phastcons_annotations(phastcons, annotations, chromosomes, args.out_dir)
 
     print(f'\n{PROG} finished on {date()} {time()}.')
 
