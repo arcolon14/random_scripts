@@ -10,7 +10,7 @@ import dnds
 # Some constants
 PROG = sys.argv[0].split('/')[-1]
 MIN_ALN_LEN = 25
-ALN_PREFIX = 'fa'
+ALN_SUFFIX = 'fa'
 
 def parse_args():
     '''Set and verify command line options.'''
@@ -37,11 +37,11 @@ def parse_args():
                    default=MIN_ALN_LEN,
                    help=f'(int) Minimum length required to keep an \
                     alignment [default={MIN_ALN_LEN}]')
-    p.add_argument('-p', '--aln-prefix',
+    p.add_argument('-p', '--aln-suffix',
                    required=False,
-                   default=ALN_PREFIX,
-                   help=f'(str) Prefix for the alignment FASTA files \
-                    [default={ALN_PREFIX}].')
+                   default=ALN_SUFFIX,
+                   help=f'(str) Suffix for the alignment FASTA files \
+                    [default={ALN_SUFFIX}].')
 
     # Check inputs
     args = p.parse_args()
@@ -67,11 +67,11 @@ def parse_sco_list(sco_f:str)->dict:
     Args
         sco_f (str): Path to the Single Copy Orthogroup list file.
     Returns:
-        sco_dict (dict): Dictionary with orthogroup IDs as keys and a 
+        sco_dict (dict): Dictionary with orthogroup IDs as keys and a
                          pair of taxon-gene IDs as values.
-        sco_dict = { orthogroup_id: { taxon_id : gene_id, 
+        sco_dict = { orthogroup_id: { taxon_id : gene_id,
                                       taxon_id : gene_id },
-                     orthogroup_id: { taxon_id : gene_id, 
+                     orthogroup_id: { taxon_id : gene_id,
                                       taxon_id : gene_id }, }
     '''
     print('\nParsing Single Copy Orthogroup input table...', flush=True)
@@ -108,7 +108,7 @@ def extract_sequences(in_msa_f:str, ingroup:str)->tuple[str, str]:
         in_msa_f (str): Path to input MSA FASTA
         ingroup (str): ID of ingroup focal species.
     Returns:
-        (ingroup_seq, outgroup_seq): tuple of sequences for 
+        (ingroup_seq, outgroup_seq): tuple of sequences for
             the ingroup and outgroup taxa.
     '''
     ingroup_seq = ''
@@ -167,10 +167,12 @@ def calculate_dnds(seq1:str, seq2:str)->list:
     if dS>0:
         dnds_rat = dN/dS
     # Prepare to return
-    # These two are type Fraction and not Float, and
-    # can cause some formatting issues downstream
+    # These are Fraction and not Float, and can cause some
+    # formatting issues downstream
     non_sites = float(non_sites)
     syn_sites = float(syn_sites)
+    pN = float(pN)
+    pS = float(pS)
     # The rest leave as is.
     dnds_out = [non_sites, # Number of non-syn sites
                 syn_sites, # Number of syn sites
@@ -185,23 +187,23 @@ def calculate_dnds(seq1:str, seq2:str)->list:
 
 def process_orthogroups(sco_list:dict, ingroup:str, alignments:str,
                         outdir:str='.', min_aln_len:int=MIN_ALN_LEN,
-                        aln_prefix:str=ALN_PREFIX)->None:
+                        aln_suffix:str=ALN_SUFFIX)->None:
     '''
     Process the alignments for all orthogroups. Extract sequences,
     calculate dN/dS, and report.
     Args:
-        sco_dict (dict): Dictionary with orthogroup IDs as keys and a 
+        sco_dict (dict): Dictionary with orthogroup IDs as keys and a
                 pair of taxon-gene IDs as values.
         ingroup (str): ID of ingroup focal species.
         alignments (str): Path to the alignment files.
         out_dir (str): Path to output directory [default=.].
-        min_aln_len (int): Minimum length required to keep an 
+        min_aln_len (int): Minimum length required to keep an
                            alignment [default=MIN_ALN_LEN].
-        aln_prefix (str): Prefix for all MSA fasta files.
+        aln_suffix (str): Suffix for all MSA fasta files.
     '''
     print('\nProcessing orthogroups...', flush=True)
     print(f'    Looking for multiple-sequence alignment FASTAs in the following format\n\
-        {alignments}/OGNNNNNNN.{aln_prefix}', flush=True)
+        {alignments}/OGNNNNNNN.{aln_suffix}', flush=True)
     # Prepare outputs
     out_tsv = f'{outdir}/pairwide_dNdS_{ingroup}.tsv'
     with open(out_tsv, 'w', encoding='utf-8') as fh:
@@ -231,7 +233,7 @@ def process_orthogroups(sco_list:dict, ingroup:str, alignments:str,
                 sys.exit(f'Error: {ingroup} not found among the taxa for orthogroup {sco_id}')
             # Select the input multiple sequence alignment and
             # extract the input sequences.
-            in_msa_f = f'{alignments}/{sco_id}.{aln_prefix}'
+            in_msa_f = f'{alignments}/{sco_id}.{aln_suffix}'
             # Some of these MSAs will not exists. This is expected.
             # Just skip them.
             if not os.path.exists(in_msa_f):
@@ -292,7 +294,7 @@ def main():
     # Process all the orthogroups
     process_orthogroups(sco_list, args.ingroup, args.alignments,
                         args.out_dir, args.min_aln_len,
-                        args.aln_prefix)
+                        args.aln_suffix)
 
     # Done!
     print(f'\n{PROG} finished on {date()} {time()}.')
