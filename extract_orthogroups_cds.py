@@ -47,29 +47,31 @@ def load_sco_ids(sco_f:str)->list:
     '''
     print('\nLoading the Single-Copy Orthogroup IDs...', flush=True)
     sco_ids = list()
+    n0_warning = False
     with open(sco_f) as fh:
         for line in fh:
             line = line.strip('\n')
             if line.startswith('#') or len(line)==0:
                 continue
+            # if not line.startswith('N0') or not line.startswith('OG'):
+            if line[0:2] not in ['N0', 'OG']:
+                sys.exit(f'Error: {line} is invalid orthogroup ID. They must start with N0.HOG or OG.')
             if line.startswith('N0'):
-                sys.exit(f'Warning: Orthogroup ID starts with N0, indicating an older version of orthofinder. This script is complatible for orthofinder versions >3.1.0.')
-            if not line.startswith('OG'):
-                sys.exit(f'Error: {line} is invalid orthogroup ID. They must start with OG[...].')
+                if not n0_warning:
+                    print(f'Warning: Orthogroup ID starts with N0, indicating an older version of orthofinder. This script is primarily compatible with orthofinder versions >3.1.0.', flush=True)
+                    n0_warning = True
             sco_ids.append(line)
-    print(f'    Loaded {len(sco_ids):,} SCO IDs from Orthogroups_SingleCopyOrthologues.txt input file.')
+    print(f'    Loaded {len(sco_ids):,} SCO IDs from Orthogroups_SingleCopyOrthologues.txt input file.', flush=True)
     return sco_ids
 
-# This is now deprecated and superseded by parse_orthogroups_table()
 # Orthofinder >3.1.0. Keeping it here for future compatibility.
-def parse_n0_table(n0_tsv_f:str, sco_ids:list, out_dir:str)->dict:
+def parse_n0_table(n0_tsv_f:str, sco_ids:list)->dict:
     '''
     Parse the orthofinder N0 table and extract the per-taxon transcript IDs
     for each Single-Copy Ortholog.
     Args:
         n0_tsv_f: (str) Path to the N0.tsv file
         sco_ids: (list) List of single-copy ortholog IDs
-        out_dir: (str) Path to output directory, for reports.
     Returns:
         transcript_ids: (dict) Dictionary of per-taxon transcript IDs.
             transcript_ids = { taxon_1 : [(transcript_1, ortholog_id_1), (transcript_2, ortholog_id_2)],
@@ -349,8 +351,14 @@ def main():
     args = parse_args()
     # Loading target IDs
     sco_ids = load_sco_ids(args.sco_list)
-    # Parse the orthogroups table
-    transcript_ids = parse_orthogroups_table(args.orthogroups_tsv, sco_ids)
+    # Set the transcript IDs
+    transcript_ids = {}
+    # Select between the two parsers based on the different orthofinder tables
+    if sco_ids[0].startswith('OG'):
+        # Parse the Orthogroups.tsv table
+        transcript_ids = parse_orthogroups_table(args.orthogroups_tsv, sco_ids)
+    elif sco_ids[0].startswith('N0'):
+        transcript_ids = parse_n0_table(args.orthogroups_tsv, sco_ids)
     # Load the per-taxon CDSs
     taxon_cds = load_taxon_cds(transcript_ids, args.cds_in_dir)
     # Prepare the outputs
