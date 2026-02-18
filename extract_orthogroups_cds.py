@@ -21,6 +21,9 @@ def parse_args(prog=PROG):
     p.add_argument('-t', '--trim-stops', required=False, default=False,
                    action='store_true',
                    help='Trim the 3\' stop codons from the extracted sequences [default=False]')
+    p.add_argument('-f', '--check-frame', required=False, default=False,
+                   action='store_true',
+                   help='Filter out sequences if the codons are out of frame, not multiple of 3 [default=False]')
     # Check inputs
     args = p.parse_args()
     assert os.path.exists(args.sco_list)
@@ -301,8 +304,11 @@ def regroup_transcripts(transcript_ids:dict)->dict:
             orthogroup_transcripts[hog_id].append((trans_id, taxon))
     return orthogroup_transcripts
 
-def group_sco_sequences(transcript_ids:dict, taxon_cds:dict,
-                        out_dir:str, trim_stops:bool=False,
+def group_sco_sequences(transcript_ids:dict,
+                        taxon_cds:dict,
+                        out_dir:str,
+                        trim_stops:bool=False,
+                        check_frame:bool=False,
                         stop_codons:list=STOP_CODONS,
                         fa_line_width:int=FA_LINE_WIDTH)->None:
     '''
@@ -312,7 +318,10 @@ def group_sco_sequences(transcript_ids:dict, taxon_cds:dict,
         transcript_ids: (dict) Dictionary of per-taxon transcript IDs.
         taxon_cds: (dict) Dictionary of per-taxon coding sequences.
         out_dir: (str) Path to output directory to save the FASTA.
-        trim_stops: (bool) Should stop codons be removed? [default=False]
+        trim_stops: (bool) Should stop codons be removed? 
+                    [default=False]
+        check_frame: (bool) Should sequences that are not multiples
+                     of three be removed? [default=False]
         stop_codons: (list) List of stop codons to be checked and removed
         fa_line_width: (int) Line width for output FASTA.
     Returns:
@@ -341,6 +350,10 @@ def group_sco_sequences(transcript_ids:dict, taxon_cds:dict,
                     if trim_stops:
                         if sequence[-3:] in stop_codons:
                             sequence = sequence[:-3]
+                    # Remove sequence if out of frame
+                    if check_frame:
+                        if len(sequence) % 3 != 0:
+                            continue
                     # Prepare the new FASTA record
                     fa_fh.write(f'>{taxon}\n')
                     # Wrap the sequence lines up to `fa_line_width` characters
@@ -368,7 +381,8 @@ def main():
     # Load the per-taxon CDSs
     taxon_cds = load_taxon_cds(transcript_ids, args.cds_in_dir)
     # Prepare the outputs
-    group_sco_sequences(transcript_ids, taxon_cds, args.out_dir, args.trim_stops)
+    group_sco_sequences(transcript_ids, taxon_cds, args.out_dir,
+                        args.trim_stops, args.check_frame)
 
     # Done!
     print(f'\n{PROG} finished on {date()} {time()}.')
