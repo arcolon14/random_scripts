@@ -10,14 +10,17 @@ STOP_CODONS = ['TAG', 'TAA', 'TGA']
 def parse_args(prog=PROG):
     '''Set and verify command line options.'''
     p = argparse.ArgumentParser()
-    p.add_argument('-s', '--sco-list', required=True, 
+    p.add_argument('-s', '--sco-list', required=True,
                    help='(str) Path to orthofinder Orthogroups/Orthogroups_SingleCopyOrthologues.txt file.')
-    p.add_argument('-r', '--orthogroups-tsv', required=True, 
+    p.add_argument('-r', '--orthogroups-tsv', required=True,
                    help='(str) Path to the orthofinder Orthogroups/Orthogroups.tsv ')
-    p.add_argument('-c', '--cds-in-dir', required=True, 
+    p.add_argument('-c', '--cds-in-dir', required=True,
                    help='(str) Path to the directory containing the input per-taxon CDS sequences.')
     p.add_argument('-o', '--out-dir', required=False, default='.',
                    help='(str) Path to output directory [default=./].')
+    p.add_argument('-t', '--trim-stops', required=False, default=False,
+                   action='store_true',
+                   help='Trim the 3\' stop codons from the extracted sequences [default=False]')
     # Check inputs
     args = p.parse_args()
     assert os.path.exists(args.sco_list)
@@ -135,7 +138,7 @@ def parse_n0_table(n0_tsv_f:str, sco_ids:list)->dict:
 
 def parse_orthogroups_table(orthogroups_tsv_f:str, sco_ids:list)->dict:
     '''
-    Parse the orthofinder Orthogroups/Orthogroups.tsv table and extract the 
+    Parse the orthofinder Orthogroups/Orthogroups.tsv table and extract the
     per-taxon transcript IDs for each Single-Copy Orthogroup.
     Args:
         orthogroups_tsv_f: (str) Path to the Orthogroups.tsv file
@@ -299,15 +302,17 @@ def regroup_transcripts(transcript_ids:dict)->dict:
     return orthogroup_transcripts
 
 def group_sco_sequences(transcript_ids:dict, taxon_cds:dict,
-                        out_dir:str, stop_codons:list=STOP_CODONS,
+                        out_dir:str, trim_stops:bool=False,
+                        stop_codons:list=STOP_CODONS,
                         fa_line_width:int=FA_LINE_WIDTH)->None:
     '''
-    Group the taxon CDS sequences for each single-copy ortholog, and save as 
+    Group the taxon CDS sequences for each single-copy ortholog, and save as
     individual FASTAs.
     Args:
         transcript_ids: (dict) Dictionary of per-taxon transcript IDs.
         taxon_cds: (dict) Dictionary of per-taxon coding sequences.
         out_dir: (str) Path to output directory to save the FASTA.
+        trim_stops: (bool) Should stop codons be removed? [default=False]
         stop_codons: (list) List of stop codons to be checked and removed
         fa_line_width: (int) Line width for output FASTA.
     Returns:
@@ -333,8 +338,9 @@ def group_sco_sequences(transcript_ids:dict, taxon_cds:dict,
                     if sequence is None:
                         sys.exit(f'Error: {trans_id} transcript not found for {taxon}.')
                     # Remove stop codons, if present.
-                    if sequence[-3:] in stop_codons:
-                        sequence = sequence[:-3]
+                    if trim_stops:
+                        if sequence[-3:] in stop_codons:
+                            sequence = sequence[:-3]
                     # Prepare the new FASTA record
                     fa_fh.write(f'>{taxon}\n')
                     # Wrap the sequence lines up to `fa_line_width` characters
@@ -362,7 +368,7 @@ def main():
     # Load the per-taxon CDSs
     taxon_cds = load_taxon_cds(transcript_ids, args.cds_in_dir)
     # Prepare the outputs
-    group_sco_sequences(transcript_ids, taxon_cds, args.out_dir)
+    group_sco_sequences(transcript_ids, taxon_cds, args.out_dir, args.trim_stops)
 
     # Done!
     print(f'\n{PROG} finished on {date()} {time()}.')
